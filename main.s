@@ -95,4 +95,4 @@ not_found_message:
 newline:
     .asciz "\n"
 process_name:
-    .asciz "backboardd"  // 或者尝试 "CommCenter"
+    .asciz "pvz"  // 或者尝试 "CommCenter"
