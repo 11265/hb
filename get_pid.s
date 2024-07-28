@@ -5,6 +5,7 @@
 _get_pid_by_name:
     stp x19, x20, [sp, #-16]!
     stp x21, x22, [sp, #-16]!
+    stp x23, x24, [sp, #-16]!
     stp x29, x30, [sp, #-16]!
     mov x29, sp
 
@@ -14,7 +15,7 @@ _get_pid_by_name:
     add x0, x0, log_entry@PAGEOFF
     bl _printf
 
-    mov x0, #8192  // 8KB for PID list
+    mov x0, #16384  // 16KB for PID list
     bl _malloc
     cmp x0, #0
     beq _cleanup   // Jump to cleanup if malloc fails
@@ -28,49 +29,63 @@ _get_pid_by_name:
     mov x0, #1  // PROC_ALL_PIDS
     mov x1, #0
     mov x2, x20  // buffer
-    mov x3, #8192
+    mov x3, #16384
     bl _proc_listpids
 
     cmp x0, #0
     ble _cleanup   // Jump to cleanup if proc_listpids fails or returns 0
 
+    mov x21, x0  // Save returned byte count
     adrp x0, log_after_listpids@PAGE
     add x0, x0, log_after_listpids@PAGEOFF
-    mov x1, x0
+    mov x1, x21
     bl _printf
 
-    mov x21, x0  // Save returned byte count
     mov x22, #0  // PID counter
-
-_pid_loop:
-    ldr w0, [x20, x22, lsl #2]  // Load PID
-    
-    mov x0, #256  // Allocate 256 bytes for process name
+    mov x23, #256  // Allocate 256 bytes for process name
+    mov x0, x23
     bl _malloc
     cmp x0, #0
     beq _cleanup   // Jump to cleanup if malloc fails
-    mov x23, x0  // Save process name buffer
+    mov x24, x0  // Save process name buffer
 
-    ldr w0, [x20, x22, lsl #2]  // Load PID again
-    mov x1, x23
-    mov x2, #256
-    bl _proc_name
+_pid_loop:
+    adrp x0, log_pid_loop@PAGE
+    add x0, x0, log_pid_loop@PAGEOFF
+    mov x1, x22
+    bl _printf
 
-    mov x0, x19  // Target process name
-    mov x1, x23  // Current process name
-    bl _strcmp
-
-    mov x0, x23
-    bl _free
-
-    cbz w0, _found_pid  // If matching process name found
-
-    add x22, x22, #1
     lsl x0, x22, #2
     cmp x0, x21
-    blt _pid_loop
+    bge _not_found
 
-    mov x0, #0  // Process not found
+    ldr w0, [x20, x22, lsl #2]  // Load PID
+    
+    mov x1, x24
+    mov x2, x23
+    bl _proc_name
+
+    cmp x0, #0
+    ble _next_pid  // Skip if proc_name fails
+
+    adrp x0, log_proc_name@PAGE
+    add x0, x0, log_proc_name@PAGEOFF
+    mov x1, x24
+    bl _printf
+
+    mov x0, x19  // Target process name
+    mov x1, x24  // Current process name
+    bl _strcmp
+
+    cmp w0, #0
+    beq _found_pid  // If matching process name found
+
+_next_pid:
+    add x22, x22, #1
+    b _pid_loop
+
+_not_found:
+    mov x0, #-1  // Process not found
     b _cleanup
 
 _found_pid:
@@ -79,9 +94,17 @@ _found_pid:
 _cleanup:
     adrp x1, log_before_free@PAGE
     add x1, x1, log_before_free@PAGEOFF
+    mov x2, x0
     bl _printf
 
-    cmp x20, #0    // Check if buffer pointer is NULL
+    cmp x24, #0    // Check if process name buffer is NULL
+    beq _free_pid_buffer
+    mov x0, x24
+    bl _free
+    mov x24, #0    // Set to NULL after freeing
+
+_free_pid_buffer:
+    cmp x20, #0    // Check if PID buffer pointer is NULL
     beq _exit      // If NULL, skip freeing
     mov x0, x20
     bl _free
@@ -93,6 +116,7 @@ _exit:
     bl _printf
 
     ldp x29, x30, [sp], #16
+    ldp x23, x24, [sp], #16
     ldp x21, x22, [sp], #16
     ldp x19, x20, [sp], #16
     ret
@@ -103,7 +127,11 @@ log_entry:
 log_after_malloc:
     .asciz "After malloc, buffer at: %p\n"
 log_after_listpids:
-    .asciz "After proc_listpids, returned: %d\n"
+    .asciz "After proc_listpids, returned: %d bytes\n"
+log_pid_loop:
+    .asciz "PID loop iteration: %d\n"
+log_proc_name:
+    .asciz "Process name: %s\n"
 log_before_free:
     .asciz "Before free, PID: %d\n"
 log_exit:
