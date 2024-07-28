@@ -1,63 +1,83 @@
 .section __DATA,__data
 KERN_SUCCESS:
-    .quad 0                   // Define KERN_SUCCESS in the data section
+    .long 0
+mib:
+    .long 1, 14, 0, 0  // CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0
+miblen:
+    .long 4
 process_name:
-    .asciz "target_process_name"  // Target process name to search for
+    .asciz "pvz"  // 替换为目标进程名
+buffer_size:
+    .quad 4096  // 初始缓冲区大小
 
-.section __TEXT,__text,regular,pure_instructions
-.global _main
+.section __TEXT,__text
+.globl _main
 
-// Importing external C functions
 .extern _sysctl
 .extern _malloc
 .extern _free
 .extern _strcmp
 
 _main:
-    // Step 1: Allocate memory for the process list
-    mov x0, #4096              // Size of buffer (adjust as needed)
-    bl _malloc                 // Call malloc
-    mov x19, x0                // Save the pointer to buffer
+    // 保存寄存器
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
 
-    // Step 2: Set up the sysctl call to get the process list
-    sub sp, sp, #16
+    // 分配内存
+    ldr x0, buffer_size
+    bl _malloc
+    mov x19, x0  // x19 = buffer
+
+    // 设置 sysctl 参数
+    sub sp, sp, #32
+    adr x0, mib
+    str x0, [sp]
+    adr x1, miblen
+    str x1, [sp, #8]
+    str x19, [sp, #16]  // buffer
+    adr x2, buffer_size
+    str x2, [sp, #24]  // &size
+
+    // 调用 sysctl
     mov x0, sp
-    str x19, [sp]
-    mov x1, sp
-    mov x2, #2
-    mov x3, #14                // KERN_PROC
-    str w3, [sp, #8]
-    mov x3, #0                 // KERN_PROC_ALL
-    str w3, [sp, #12]
     bl _sysctl
 
-    // Check if sysctl succeeded
-    ldr x1, =KERN_SUCCESS      // Load the address of KERN_SUCCESS
-    ldr w1, [x1]               // Load the value of KERN_SUCCESS into w1
-    cmp w0, w1                 // Compare w0 with w1
-    b.ne .cleanup_label        // Jump to cleanup_label if not equal
+    // 检查返回值
+    cmp w0, #0
+    bne .cleanup
 
-    // Step 3: Loop through the process list and find the PID by name
-    mov x20, x19               // Pointer to the process list
-    ldr x0, =process_name      // Pointer to the target process name
+    // 遍历进程列表
+    mov x20, x19  // x20 = current process
+    ldr x21, buffer_size  // x21 = buffer size
+    adr x22, process_name  // x22 = target process name
 
-process_loop:
-    ldr x1, [x20]              // Load the process name from the buffer
-    bl _strcmp                 // Compare process names
-    cbz w0, found_pid          // If matched, jump to found_pid
+.loop:
+    ldr x0, [x20, #44]  // 假设进程名在偏移量44处，可能需要调整
+    mov x1, x22
+    bl _strcmp
+    cbz w0, .found_process
 
-    // Move to the next process (assuming structure size is known, e.g., 64 bytes)
-    add x20, x20, #64          // Adjust the size as needed
-    cbnz x20, process_loop     // Repeat if not end of list
+    add x20, x20, #0x100  // 移动到下一个进程，假设每个条目大小为256字节
+    sub x21, x21, #0x100
+    cmp x21, #0
+    bgt .loop
 
-.cleanup_label:
-    // Clean up and exit
+    b .not_found
+
+.found_process:
+    // 进程找到，PID 通常在结构的开始
+    ldr w0, [x20]
+    // 这里可以添加代码来处理找到的 PID
+    b .cleanup
+
+.not_found:
+    mov w0, #-1
+
+.cleanup:
+    // 释放内存
     mov x0, x19
     bl _free
-    mov w0, #0
-    ret
 
-found_pid:
-    // x1 contains the PID of the found process
-    // Perform desired actions with the PID (e.g., store, print, etc.)
-    b .cleanup_label
+    // 恢复寄存器并返回
+    ldp x29, x30, [sp], #16
+    ret
