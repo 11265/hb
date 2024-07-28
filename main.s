@@ -9,7 +9,7 @@ miblen:
     .long 4
     .long 0
 buffer_size:
-    .quad 1048576  // 增加到 1MB
+    .quad 1048576  // 1MB
 process_name:
     .asciz "pvz"
     .align 3
@@ -28,11 +28,25 @@ _main:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
 
+    // 打印开始信息
+    adrp x0, start_msg@PAGE
+    add x0, x0, start_msg@PAGEOFF
+    bl _printf
+
     // 分配内存
     adrp x0, buffer_size@PAGE
     ldr x0, [x0, buffer_size@PAGEOFF]
     bl _malloc
     mov x19, x0  // x19 = buffer
+
+    // 检查内存分配
+    cmp x19, #0
+    beq .malloc_failed
+
+    // 打印内存分配成功
+    adrp x0, malloc_success@PAGE
+    add x0, x0, malloc_success@PAGEOFF
+    bl _printf
 
     // 设置 sysctl 参数
     sub sp, sp, #48
@@ -54,7 +68,12 @@ _main:
 
     // 检查返回值
     cmp w0, #0
-    bne .cleanup
+    bne .sysctl_failed
+
+    // 打印 sysctl 成功
+    adrp x0, sysctl_success@PAGE
+    add x0, x0, sysctl_success@PAGEOFF
+    bl _printf
 
     // 遍历进程列表
     mov x20, x19  // x20 = current process
@@ -64,6 +83,13 @@ _main:
     add x22, x22, process_name@PAGEOFF  // x22 = target process name
 
 .loop:
+    // 打印当前处理的进程信息
+    adrp x0, process_info@PAGE
+    add x0, x0, process_info@PAGEOFF
+    ldr w1, [x20, #24]  // PID
+    ldr x2, [x20, #52]  // 进程名
+    bl _printf
+
     ldr x0, [x20, #52]  // 进程名通常在 kp_proc.p_comm
     mov x1, x22
     bl _strcmp
@@ -91,18 +117,46 @@ _main:
     add x0, x0, not_found_msg@PAGEOFF
     bl _printf
     mov w0, #-1
+    b .cleanup
+
+.malloc_failed:
+    adrp x0, malloc_failed_msg@PAGE
+    add x0, x0, malloc_failed_msg@PAGEOFF
+    bl _printf
+    mov w0, #-1
+    b .exit
+
+.sysctl_failed:
+    adrp x0, sysctl_failed_msg@PAGE
+    add x0, x0, sysctl_failed_msg@PAGEOFF
+    mov w1, w0
+    bl _printf
+    mov w0, #-1
 
 .cleanup:
     // 释放内存
     mov x0, x19
     bl _free
 
+.exit:
     // 恢复寄存器并返回
     ldp x29, x30, [sp], #16
     ret
 
 .section __TEXT,__cstring
+start_msg:
+    .asciz "Program started\n"
+malloc_success:
+    .asciz "Memory allocated successfully\n"
+sysctl_success:
+    .asciz "sysctl call successful\n"
+process_info:
+    .asciz "Processing: PID %d, Name: %s\n"
 pid_format:
-    .asciz "PID: %d\n"
+    .asciz "PID found: %d\n"
 not_found_msg:
     .asciz "Process not found\n"
+malloc_failed_msg:
+    .asciz "Memory allocation failed\n"
+sysctl_failed_msg:
+    .asciz "sysctl call failed with error: %d\n"
