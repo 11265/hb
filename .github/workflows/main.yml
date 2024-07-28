@@ -36,10 +36,8 @@ jobs:
       - name: Build assembly code
         run: |
           set -x
-          xcrun -sdk iphoneos clang -v -arch arm64 -mios-version-min=13.0 -c print_number.c -o print_number.o
+
           xcrun -sdk iphoneos as -v -arch arm64 -o main.o main.s
-          xcrun -sdk iphoneos as -v -arch arm64 -o get_pid.o get_pid.s
-          xcrun -sdk iphoneos clang -v -arch arm64 -mios-version-min=13.0 main.o get_pid.o print_number.o -o main
 
       - name: List output files
         run: ls -la
@@ -50,8 +48,6 @@ jobs:
           otool -hv main
           echo "Object file content:"
           hexdump -C main.o | head -n 20
-          hexdump -C get_pid.o | head -n 20
-          hexdump -C print_number.o | head -n 20
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
