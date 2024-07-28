@@ -20,7 +20,7 @@ _main:
     // 打印当前进程 ID
     adrp x0, current_pid_format@PAGE
     add x0, x0, current_pid_format@PAGEOFF
-    mov x1, x19
+    mov w1, w19  // 确保 PID 作为 32 位整数传递
     bl _printf
 
 _exit_program:
