@@ -1,9 +1,9 @@
 .section __DATA,__data
 .align 3
 pids:
-    .space 4*100  // 假设最多100个进程，每个进程ID占4字节
+    .space 8*100  // 假设最多100个进程，每个进程ID占8字节
 max_pids:
-    .long 100
+    .quad 100
 
 .section __TEXT,__text
 .globl _main
@@ -21,13 +21,13 @@ _main:
     // 调用proc_listallpids获取所有进程ID
     adrp x0, pids@PAGE
     add x0, x0, pids@PAGEOFF
-    mov x1, #400  // 4*100
+    mov x1, #800  // 8*100
     bl _proc_listallpids
 
     // 检查返回值
     cmp x0, #0
     b.le _error_proc_list
-    cmp x0, #400
+    cmp x0, #800
     b.gt _error_too_many_bytes
 
     // 保存返回的字节数
@@ -39,13 +39,13 @@ _main:
     mov x1, x19
     bl _printf
 
-    // 计算实际进程数量（字节数除以4）
-    lsr x19, x19, #2  // 右移2位，相当于除以4
+    // 计算实际进程数量（字节数除以8）
+    lsr x19, x19, #3  // 右移3位，相当于除以8
 
     // 检查进程数量是否合理
     adrp x1, max_pids@PAGE
     add x1, x1, max_pids@PAGEOFF
-    ldr w1, [x1]
+    ldr x1, [x1]
     cmp x19, x1
     b.gt _error_too_many
 
@@ -55,52 +55,84 @@ _main:
     mov x1, x19
     bl _printf
 
+    // 获取用户输入的进程名
+    sub sp, sp, #256
+    mov x20, sp  // 保存进程名缓冲区地址
+
+    adrp x0, input_prompt@PAGE
+    add x0, x0, input_prompt@PAGEOFF
+    bl _printf
+
+    mov x0, x20  // 缓冲区地址
+    mov x1, #256  // 缓冲区大小
+    mov x2, #0  // stdin
+    mov x16, #3  // read系统调用
+    svc #0x80
+
+    // 移除换行符
+    mov x21, x0  // 保存读取的字节数
+    sub x21, x21, #1
+    strb wzr, [x20, x21]
+
     // 初始化循环
-    mov x20, #0  // 循环计数器
-    adrp x21, pids@PAGE
-    add x21, x21, pids@PAGEOFF  // x21 = pids数组起始地址
+    mov x22, #0  // 循环计数器
+    adrp x23, pids@PAGE
+    add x23, x23, pids@PAGEOFF  // x23 = pids数组起始地址
 
 _loop:
-    cmp x20, x19
-    b.ge _exit
+    cmp x22, x19
+    b.ge _not_found
 
     // 获取当前进程ID
-    ldr w22, [x21, x20, lsl #2]
-
-    // 打印当前处理的进程ID
-    adrp x0, processing_pid_msg@PAGE
-    add x0, x0, processing_pid_msg@PAGEOFF
-    mov x1, x22
-    bl _printf
+    ldr x24, [x23, x22, lsl #3]
 
     // 为进程路径分配栈空间
     sub sp, sp, #1024
-    mov x23, sp
+    mov x25, sp
 
     // 调用proc_pidpath获取进程路径
-    mov x0, x22  // 进程ID
-    mov x1, x23  // 缓冲区
+    mov x0, x24  // 进程ID
+    mov x1, x25  // 缓冲区
     mov x2, #1024  // 缓冲区大小
     bl _proc_pidpath
 
     // 检查返回值
     cmp x0, #0
-    b.le _skip_print
+    b.le _continue_loop
 
-    // 打印进程ID和路径
-    adrp x0, process_info_msg@PAGE
-    add x0, x0, process_info_msg@PAGEOFF
-    mov x1, x22
-    mov x2, x23
+    // 获取进程名（最后一个'/'之后的部分）
+    mov x0, x25
+    bl _strrchr
+    cmp x0, #0
+    b.eq _continue_loop
+    add x0, x0, #1  // 移过'/'
+
+    // 比较进程名
+    mov x1, x20  // 用户输入的进程名
+    bl _strcmp
+    cmp x0, #0
+    b.ne _continue_loop
+
+    // 找到匹配的进程，打印PID
+    adrp x0, found_msg@PAGE
+    add x0, x0, found_msg@PAGEOFF
+    mov x1, x24
     bl _printf
+    b _exit
 
-_skip_print:
+_continue_loop:
     // 恢复栈
     add sp, sp, #1024
 
     // 增加循环计数器
-    add x20, x20, #1
+    add x22, x22, #1
     b _loop
+
+_not_found:
+    adrp x0, not_found_msg@PAGE
+    add x0, x0, not_found_msg@PAGEOFF
+    bl _printf
+    b _exit
 
 _error_proc_list:
     // 打印错误消息
@@ -124,7 +156,7 @@ _error_too_many:
     mov x1, x19
     adrp x2, max_pids@PAGE
     add x2, x2, max_pids@PAGEOFF
-    ldr w2, [x2]
+    ldr x2, [x2]
     bl _printf
     b _exit
 
@@ -151,9 +183,11 @@ error_too_many_msg:
     .asciz "错误：进程数量 (%d) 超过最大限制 (%d)\n"
 count_msg:
     .asciz "进程数量: %d\n"
-processing_pid_msg:
-    .asciz "正在处理进程ID: %d\n"
-process_info_msg:
-    .asciz "进程ID: %d, 路径: %s\n"
+input_prompt:
+    .asciz "请输入要查找的进程名称: "
+found_msg:
+    .asciz "找到匹配的进程，PID: %d\n"
+not_found_msg:
+    .asciz "未找到匹配的进程\n"
 end_msg:
     .asciz "程序执行结束\n"
