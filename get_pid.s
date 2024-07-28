@@ -45,7 +45,7 @@ _get_pid_by_name:
 
     mov x22, #0  // PID counter
     mov w22, #4           // Load constant 4 into w22
-    udiv x23, x21, w22    // Calculate number of PIDs (byte count / 4)
+    udiv x23, x21, x22    // Both x21 and x22 are 64-bit registers
     adrp x0, log_pid_count@PAGE
     add x0, x0, log_pid_count@PAGEOFF
     mov x1, x23
