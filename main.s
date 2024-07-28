@@ -24,18 +24,22 @@ _main:
     mov x29, sp
 
     // 分配内存
-    ldr x0, buffer_size
+    adrp x0, buffer_size@PAGE
+    ldr x0, [x0, buffer_size@PAGEOFF]
     bl _malloc
     mov x19, x0  // x19 = buffer
 
     // 设置 sysctl 参数
     sub sp, sp, #32
-    adr x0, mib
+    adrp x0, mib@PAGE
+    add x0, x0, mib@PAGEOFF
     str x0, [sp]
-    adr x1, miblen
+    adrp x1, miblen@PAGE
+    add x1, x1, miblen@PAGEOFF
     str x1, [sp, #8]
     str x19, [sp, #16]  // buffer
-    adr x2, buffer_size
+    adrp x2, buffer_size@PAGE
+    add x2, x2, buffer_size@PAGEOFF
     str x2, [sp, #24]  // &size
 
     // 调用 sysctl
@@ -48,8 +52,10 @@ _main:
 
     // 遍历进程列表
     mov x20, x19  // x20 = current process
-    ldr x21, buffer_size  // x21 = buffer size
-    adr x22, process_name  // x22 = target process name
+    adrp x21, buffer_size@PAGE
+    ldr x21, [x21, buffer_size@PAGEOFF]  // x21 = buffer size
+    adrp x22, process_name@PAGE
+    add x22, x22, process_name@PAGEOFF  // x22 = target process name
 
 .loop:
     ldr x0, [x20, #44]  // 假设进程名在偏移量44处，可能需要调整
