@@ -4,6 +4,8 @@ pids:
     .space 8*1000  // 假设最多1000个进程，每个进程ID占8字节
 max_pids:
     .quad 1000
+buffer_size:
+    .quad 8000
 
 .section __TEXT,__text
 .globl _main
@@ -21,13 +23,18 @@ _main:
     // 调用proc_listallpids获取所有进程ID
     adrp x0, pids@PAGE
     add x0, x0, pids@PAGEOFF
-    mov x1, #8000  // 8*1000
+    adrp x1, buffer_size@PAGE
+    add x1, x1, buffer_size@PAGEOFF
+    ldr x1, [x1]
     bl _proc_listallpids
 
     // 检查返回值
     cmp x0, #0
     b.le _error_proc_list
-    cmp x0, #8000
+    adrp x1, buffer_size@PAGE
+    add x1, x1, buffer_size@PAGEOFF
+    ldr x1, [x1]
+    cmp x0, x1
     b.gt _error_too_many_bytes
 
     // 保存返回的字节数
