@@ -8,5 +8,6 @@
 #include <libproc.h>
 
 extern int get_pid_by_name(const char* name);
+extern void print_number(int number);
 
 #endif // API_H
