@@ -52,15 +52,15 @@ jobs:
       - name: Link object files
         run: |
           set -x
-          xcrun -sdk iphoneos clang -arch arm64 -o find_pvz main.o get_pid.o -isysroot $(xcrun --sdk iphoneos --show-sdk-path)
+          xcrun -sdk iphoneos clang -arch arm64 -o main main.o get_pid.o -isysroot $(xcrun --sdk iphoneos --show-sdk-path)
 
       - name: List output files
         run: ls -la
 
       - name: Display file information
         run: |
-          file find_pvz
-          otool -hv find_pvz
+          file main
+          otool -hv main
           echo "Object file content:"
           hexdump -C main.o | head -n 20
           hexdump -C get_pid.o | head -n 20
@@ -70,5 +70,5 @@ jobs:
         with:
           name: ARM64_PVZ_Finder
           path: |
-            find_pvz
+            main
           retention-days: 30
