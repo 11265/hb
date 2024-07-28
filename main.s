@@ -28,16 +28,16 @@ _main:
     cmp x0, #0
     b.le _error_proc_list
 
-    // 保存进程数量
+    // 保存返回的字节数
     mov x19, x0
 
-    // 打印原始返回值
+    // 打印原始返回值（字节数）
     adrp x0, raw_return_msg@PAGE
     add x0, x0, raw_return_msg@PAGEOFF
     mov x1, x19
     bl _printf
 
-    // 计算实际进程数量
+    // 计算实际进程数量（字节数除以4）
     mov x20, #4
     udiv x19, x19, x20
 
@@ -105,7 +105,6 @@ _error_proc_list:
     // 打印错误消息
     adrp x0, error_proc_list_msg@PAGE
     add x0, x0, error_proc_list_msg@PAGEOFF
-    mov x1, x0
     bl _printf
     b _exit
 
@@ -118,6 +117,7 @@ _error_too_many:
     add x2, x2, max_pids@PAGEOFF
     ldr w2, [x2]
     bl _printf
+    b _exit
 
 _exit:
     // 打印结束消息
@@ -133,7 +133,7 @@ _exit:
 start_msg:
     .asciz "程序开始执行\n"
 raw_return_msg:
-    .asciz "proc_listallpids 原始返回值: %d\n"
+    .asciz "proc_listallpids 原始返回值（字节数）: %d\n"
 error_proc_list_msg:
     .asciz "获取进程列表失败\n"
 error_too_many_msg:
