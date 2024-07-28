@@ -36,22 +36,11 @@ jobs:
           echo "Object file content:"
           hexdump -C getpid.o | head -n 20
 
-      - name: Upload artifact (only on failure)
-        if: failure()
+      - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
           name: ios-assembly-binary
           path: |
             getpid
             getpid.o
-          retention-days: 3
-
-      - name: Delete old artifacts
-        uses: actions/github-script@v6
-        if: success() || failure()  # Run this step regardless of job outcome
-        with:
-          github-token: ${{secrets.GITHUB_TOKEN}}
-          script: |
-            const script = require('${{github.workspace}}/.github/workflows/delete-old-artifacts.js')
-            console.log("About to run script")
-            await script({github, context})
+          retention-days: 30
