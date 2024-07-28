@@ -2,7 +2,7 @@
 .align 2
 
 _main:
-    // 保存链接寄存器
+    // 保存链接寄存器和帧指针
     stp     x29, x30, [sp, #-16]!
     mov     x29, sp
 
@@ -14,18 +14,19 @@ _main:
     // 调用 get_pvz_pid 函数
     bl      _get_pvz_pid
 
-    // 立即打印返回值
+    // 将返回值从 x0 移动到 w1 (32-bit)
     mov     w1, w0
+
+    // 打印汇编中接收到的返回值
     adrp    x0, return_msg@PAGE
     add     x0, x0, return_msg@PAGEOFF
     bl      _printf
 
     // 检查返回值是否为 -1
-    cmp     w0, #-1
+    cmp     w1, #-1
     b.eq    not_found
 
     // 打印找到进程的信息
-    mov     w1, w0  // 将返回的 PID 移动到 w1 作为第二个参数
     adrp    x0, found_msg@PAGE
     add     x0, x0, found_msg@PAGEOFF
     bl      _printf
@@ -43,7 +44,7 @@ end:
     add     x0, x0, end_msg@PAGEOFF
     bl      _printf
 
-    // 恢复链接寄存器并返回
+    // 恢复链接寄存器和帧指针，并返回
     ldp     x29, x30, [sp], #16
     mov     w0, #0
     ret
