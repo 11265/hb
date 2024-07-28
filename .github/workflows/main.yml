@@ -28,15 +28,15 @@ jobs:
           xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -c get_pid.s -o get_pid.o
           xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -c print_number.s -o print_number.o
           # 链接生成可执行文件
-          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -o 取进程ID main.o get_pid.o print_number.o -e _main -lSystem -nostdlib
+          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -o main main.o get_pid.o print_number.o -e _main -lSystem -nostdlib
 
       - name: List output files
         run: ls -la
 
       - name: Display file information
         run: |
-          file 取进程ID
-          otool -hv 取进程ID
+          file main
+          otool -hv main
           echo "Object file content:"
           hexdump -C main.o | head -n 20
           hexdump -C get_pid.o | head -n 20
@@ -47,8 +47,5 @@ jobs:
         with:
           name: ios-assembly-binary
           path: |
-            取进程ID
-            main.o
-            get_pid.o
-            print_number.o
+            main
           retention-days: 30
