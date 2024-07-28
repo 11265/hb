@@ -33,19 +33,28 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-path
           echo $PATH
 
+      - name: List source files
+        run: |
+          ls -la
+          cat main.s
+
       - name: Build assembly code
         run: |
           set -x
-          ls -la
           xcrun -sdk iphoneos as -arch arm64 -o main.o main.s
+
+      - name: Link object file
+        run: |
+          set -x
+          xcrun -sdk iphoneos clang -arch arm64 -o main main.o
 
       - name: List output files
         run: ls -la
 
       - name: Display file information
         run: |
-          file main.o
-          otool -hv main.o
+          file main
+          otool -hv main
           echo "Object file content:"
           hexdump -C main.o | head -n 20
 
