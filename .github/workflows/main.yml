@@ -29,15 +29,25 @@ jobs:
       - name: List output files
         run: ls -la
 
-      - name: Upload artifact
+      - name: Display file information
+        run: |
+          file getpid
+          otool -hv getpid
+          echo "Object file content:"
+          hexdump -C getpid.o | head -n 20
+
+      - name: Upload artifact (only on failure)
+        if: failure()
         uses: actions/upload-artifact@v3
         with:
           name: ios-assembly-binary
           path: |
             getpid
             getpid.o
+          retention-days: 3
 
-      - name: Display file information
-        run: |
-          file getpid
-          otool -hv getpid
+      - name: Clean up old artifacts
+        uses: c-hive/gha-remove-artifacts@v1
+        with:
+          age: '1 week'
+          skip-recent: 5
