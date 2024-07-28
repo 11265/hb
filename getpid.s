@@ -53,11 +53,11 @@ _print_number:
     mov x1, x0                     // 备份 PID
     add x2, sp, #16                // 指向临时缓冲区
     mov x3, #0                     // 累计字符数
-    mov x4, #'0                    // 数字 '0'
+    mov x4, #48                    // 数字 '0' 的 ASCII 值
 
 _print_digit:
     udiv x5, x1, #10               // 计算 x1 / 10
-    msub x6, x5, x5, x1, #10       // 计算余数 x1 % 10
+    msub x6, x1, x5, #10           // 计算余数 x1 % 10
     add x6, x6, x4                 // 转换为字符
     strb w6, [x2, x3]              // 存储字符
     mov x1, x5                     // 更新 x1 为商
@@ -66,15 +66,11 @@ _print_digit:
     bne _print_digit               // 如果不是 0，继续
 
     // 反向输出字符串
-    add x0, x2, x3                 // 指向缓冲区结束位置
-    mov x2, #1                     // 字符宽度
-_print_digit_reverse:
-    sub x0, x0, #1                 // 移动到下一个字符
-    ldrb w1, [x0]                  // 加载字符
+    sub x2, x2, #1                 // 指向最后一个字符
+    add x0, x2, #0                 // 设置输出字符的指针
+    mov x2, x3                     // 设置输出字符的长度
     mov x16, #4                    // syscall: write
     svc #0x80                      // 输出字符
-    sub x3, x3, #1                 // 减少字符数
-    cbnz x3, _print_digit_reverse  // 如果还有字符，继续
 
     ret                            // 返回主程序
 
