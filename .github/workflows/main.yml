@@ -45,7 +45,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
-          name: ios-assembly-binary
+          name: Rubbish
           path: |
             main
           retention-days: 30
