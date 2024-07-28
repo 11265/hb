@@ -14,9 +14,6 @@ _main:
     // 调用获取进程 ID 的函数
     bl _get_pid
 
-
-    
-
     // 保存 PID
     mov x19, x0                    // 将 PID 保存到 x19 中
 
@@ -46,8 +43,6 @@ _main:
     svc #0x80                      // 进行系统调用
 
 .section __DATA,__data
-message:
-    .asciz "iOS Assembly!\n"       // 输出的消息
 pid_message:
     .asciz "PID: "                 // PID 前缀消息
 newline:
