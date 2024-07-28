@@ -1,0 +1,29 @@
+name: Build Assembly Code for iOS
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Xcode environment
+        run: |
+          export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+
+      - name: Build assembly code
+        run: |
+          clang -c -o getpid.o getpid.s -target arm64-apple-ios13.0
+          clang -o getpid getpid.o -target arm64-apple-ios13.0 -sdk $(xcrun --sdk iphoneos --show-sdk-path) -nostdlib -e _main
+
+      - name: List output files
+        run: ls -la getpid
