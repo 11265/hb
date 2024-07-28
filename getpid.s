@@ -26,7 +26,7 @@ _main:
     mov x16, #4
     svc #0x80
 
-    // 打印实际的 PID 数字
+// 打印实际的 PID 数字
     mov x0, x19
     bl _print_number
 
@@ -59,7 +59,7 @@ _print_number:
 
 _print_digit:
     udiv x5, x1, x7                // 计算 x1 / 10
-    msub x6, x1, x5, x7            // 计算余数 x1 % 10
+    msub x6, x5, x7, x1            // 计算余数 x1 - (x5 * 10)
     add x6, x6, x4                 // 转换为字符
     strb w6, [x2]                  // 存储字符
     sub x2, x2, #1                 // 移动指针到缓冲区前一个位置
@@ -70,8 +70,6 @@ _print_digit:
 
     add x2, x2, #1                 // 调整指针到第一个数字
     mov x0, #1                     // 文件描述符: stdout
-    mov x1, x2                     // 设置输出字符的指针
-    mov x2, x3                     // 设置输出字符的长度
     mov x16, #4                    // syscall: write
     svc #0x80                      // 输出字符
 
