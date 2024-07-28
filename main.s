@@ -7,7 +7,7 @@ buffer:
 buffer_size:
     .quad 1024*1024
 process_name:
-    .asciz "pvz"  // 要查找的进程名称
+    .asciz "PVZ"  // 要查找的进程名称
 
 .section __TEXT,__text
 .globl _main
