@@ -44,9 +44,21 @@ _main:
     add x21, x21, buffer_size@PAGEOFF
     ldr x21, [x21]  // x21 = 实际返回的大小
 
+    // 打印实际返回的大小（调试用）
+    adrp x0, size_msg@PAGE
+    add x0, x0, size_msg@PAGEOFF
+    mov x1, x21
+    bl _printf
+
     // 计算结构体数量
     mov x22, #0x230  // kinfo_proc结构体大小 (可能需要根据系统调整)
     udiv x23, x21, x22  // x23 = 结构体数量
+
+    // 打印结构体数量（调试用）
+    adrp x0, count_msg@PAGE
+    add x0, x0, count_msg@PAGEOFF
+    mov x1, x23
+    bl _printf
 
     // 初始化循环
     adrp x19, buffer@PAGE
@@ -60,7 +72,7 @@ _loop:
     // 打印进程名称
     adrp x0, process_name_msg@PAGE
     add x0, x0, process_name_msg@PAGEOFF
-    add x1, x19, #0x1ac  // p_comm在kinfo_proc中的偏移 (可能需要根据系统调整)
+    add x1, x19, #0x170  // 修改这个偏移量，0x170是一个猜测值
     bl _printf
 
     add x19, x19, x22  // 移动到下一个结构体
@@ -89,3 +101,7 @@ success_msg:
     .asciz "sysctl调用成功\n"
 process_name_msg:
     .asciz "进程名称: %s\n"
+size_msg:
+    .asciz "返回的数据大小: %d\n"
+count_msg:
+    .asciz "结构体数量: %d\n"
