@@ -31,47 +31,29 @@ _main:
     cmp x0, #0
     b.le _error_read
 
-    // 调用sysctl获取进程列表
-    sub sp, sp, #32
-    mov x21, sp  // 保存mib数组地址
+    // 调用proc_listpids获取进程列表
+    mov w0, #1  // PROC_ALL_PIDS
+    mov x1, #0  // 传递NULL作为buffer
+    mov x2, #0  // buffersize为0
+    mov x3, #0  // 不需要实际数量
+    bl _proc_listpids
 
-    // 设置mib数组
-    mov w0, #1
-    str w0, [x21]
-    mov w0, #14
-    str w0, [x21, #4]
-    mov w0, #0
-    str w0, [x21, #8]
-    str w0, [x21, #12]
-    str w0, [x21, #16]
-    str w0, [x21, #20]
-
-    // 调用sysctl
-    mov x0, x21  // mib数组
-    mov w1, #6   // miblen
-    mov x2, #0   // oldp
-    mov x3, sp   // oldlenp (使用栈上的空间)
-    mov x4, #0   // newp
-    mov x5, #0   // newlen
-    mov x16, #202  // sysctl系统调用
-    svc #0x80
-
-    // 检查sysctl调用是否成功
+    // 检查返回值
     cmp x0, #0
-    b.ne _error_sysctl
+    b.le _error_proc_listpids
 
     // 打印获取到的大小
-    ldr x1, [sp]
+    mov x1, x0
     adrp x0, size_msg@PAGE
     add x0, x0, size_msg@PAGEOFF
     bl _printf
 
     b _exit
 
-_error_sysctl:
-    // 打印sysctl错误消息
-    adrp x0, error_sysctl_msg@PAGE
-    add x0, x0, error_sysctl_msg@PAGEOFF
+_error_proc_listpids:
+    // 打印proc_listpids错误消息
+    adrp x0, error_proc_listpids_msg@PAGE
+    add x0, x0, error_proc_listpids_msg@PAGEOFF
     bl _puts
     b _exit
 
@@ -98,8 +80,8 @@ input_prompt:
     .asciz "请输入要查找的进程名称: "
 size_msg:
     .asciz "获取到的进程信息大小: %d 字节\n"
-error_sysctl_msg:
-    .asciz "错误：调用sysctl失败"
+error_proc_listpids_msg:
+    .asciz "错误：调用proc_listpids失败"
 error_read_msg:
     .asciz "错误：读取输入失败"
 end_msg:
