@@ -23,8 +23,12 @@ jobs:
 
       - name: Build assembly code
         run: |
-          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -c getpid.s -o getpid.o
-          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -o getpid getpid.o -e _main -lSystem -nostdlib
+          # 编译每个汇编文件
+          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -c main.s -o main.o
+          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -c get_pid.s -o get_pid.o
+          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -c print_number.s -o print_number.o
+          # 链接生成可执行文件
+          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -o getpid main.o get_pid.o print_number.o -e _main -lSystem -nostdlib
 
       - name: List output files
         run: ls -la
@@ -34,7 +38,9 @@ jobs:
           file getpid
           otool -hv getpid
           echo "Object file content:"
-          hexdump -C getpid.o | head -n 20
+          hexdump -C main.o | head -n 20
+          hexdump -C get_pid.o | head -n 20
+          hexdump -C print_number.o | head -n 20
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
@@ -42,5 +48,7 @@ jobs:
           name: ios-assembly-binary
           path: |
             getpid
-            getpid.o
+            main.o
+            get_pid.o
+            print_number.o
           retention-days: 30
