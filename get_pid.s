@@ -34,6 +34,8 @@ _get_pid_by_name:
 
     cmp x0, #0
     ble _cleanup   // Jump to cleanup if proc_listpids fails or returns 0
+    cmp x0, #16384
+    bgt _cleanup   // Jump to cleanup if proc_listpids returns more than our buffer size
 
     mov x21, x0  // Save returned byte count
     adrp x0, log_after_listpids@PAGE
@@ -42,27 +44,31 @@ _get_pid_by_name:
     bl _printf
 
     mov x22, #0  // PID counter
-    mov x23, #256  // Allocate 256 bytes for process name
-    mov x0, x23
+    udiv x23, x21, #4  // Calculate number of PIDs (byte count / 4)
+    adrp x0, log_pid_count@PAGE
+    add x0, x0, log_pid_count@PAGEOFF
+    mov x1, x23
+    bl _printf
+
+    mov x0, #256  // Allocate 256 bytes for process name
     bl _malloc
     cmp x0, #0
     beq _cleanup   // Jump to cleanup if malloc fails
     mov x24, x0  // Save process name buffer
 
 _pid_loop:
+    cmp x22, x23
+    bge _not_found
+
     adrp x0, log_pid_loop@PAGE
     add x0, x0, log_pid_loop@PAGEOFF
     mov x1, x22
     bl _printf
 
-    lsl x0, x22, #2
-    cmp x0, x21
-    bge _not_found
-
     ldr w0, [x20, x22, lsl #2]  // Load PID
     
     mov x1, x24
-    mov x2, x23
+    mov x2, #256
     bl _proc_name
 
     cmp x0, #0
@@ -128,6 +134,8 @@ log_after_malloc:
     .asciz "After malloc, buffer at: %p\n"
 log_after_listpids:
     .asciz "After proc_listpids, returned: %d bytes\n"
+log_pid_count:
+    .asciz "Total PIDs: %d\n"
 log_pid_loop:
     .asciz "PID loop iteration: %d\n"
 log_proc_name:
