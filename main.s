@@ -19,7 +19,7 @@ _main:
     mov x0, #1
     adrp x1, current_pid_message@PAGE
     add x1, x1, current_pid_message@PAGEOFF
-    mov x2, #16
+    mov x2, #13  // 修改为正确的长度
     mov x16, #4
     svc #0x80
 
@@ -59,7 +59,7 @@ _not_found:
     mov x0, #1
     adrp x1, not_found_message@PAGE
     add x1, x1, not_found_message@PAGEOFF
-    mov x2, #30
+    mov x2, #35  // 修改为正确的长度
     mov x16, #4
     svc #0x80
 
@@ -89,8 +89,8 @@ current_pid_message:
 found_pid_message:
     .asciz "Found process PID: "
 not_found_message:
-    .asciz "Process not found or error occurred"
+    .asciz "Process not found or error occurred\n"
 newline:
     .asciz "\n"
 process_name:
-    .asciz "pvz"
+    .asciz "SpringBoard"  // 修改为更可能找到的进程名
