@@ -27,4 +27,17 @@ jobs:
           xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -o getpid getpid.o -e _main -lSystem -nostdlib
 
       - name: List output files
-        run: ls -la getpid
+        run: ls -la
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ios-assembly-binary
+          path: |
+            getpid
+            getpid.o
+
+      - name: Display file information
+        run: |
+          file getpid
+          otool -hv getpid
