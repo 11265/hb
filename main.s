@@ -6,6 +6,8 @@ max_pids:
     .quad 1000
 buffer_size:
     .quad 8000
+mib:
+    .long 1, 14, 0, 0  // CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0
 
 .section __TEXT,__text
 .globl _main
@@ -20,47 +22,42 @@ _main:
     add x0, x0, start_msg@PAGEOFF
     bl _printf
 
-    // 调用proc_listallpids获取所有进程ID
-    adrp x0, pids@PAGE
-    add x0, x0, pids@PAGEOFF
+    // 调用sysctl获取所有进程ID
+    sub sp, sp, #16
+    mov x0, sp
     adrp x1, buffer_size@PAGE
     add x1, x1, buffer_size@PAGEOFF
     ldr x1, [x1]
-    bl _proc_listallpids
+    str x1, [x0]  // 存储buffer_size到栈上
+
+    adrp x0, mib@PAGE
+    add x0, x0, mib@PAGEOFF
+    mov x1, #4  // mib数组长度
+    mov x2, sp  // oldp (buffer size pointer)
+    mov x3, sp  // oldlenp
+    adrp x4, pids@PAGE
+    add x4, x4, pids@PAGEOFF
+    mov x5, #0  // newp
+    mov x6, #0  // newlen
+    mov x16, #202  // sysctl系统调用号
+    svc #0x80
 
     // 检查返回值
     cmp x0, #0
-    b.le _error_proc_list
-    adrp x1, buffer_size@PAGE
-    add x1, x1, buffer_size@PAGEOFF
-    ldr x1, [x1]
-    cmp x0, x1
-    b.gt _error_too_many_bytes
+    b.ne _error_proc_list
 
-    // 保存返回的字节数
-    mov x19, x0
-
-    // 打印原始返回值（字节数）
-    adrp x0, raw_return_msg@PAGE
-    add x0, x0, raw_return_msg@PAGEOFF
-    mov x1, x19
-    bl _printf
-
-    // 计算实际进程数量（字节数除以8）
-    lsr x19, x19, #3  // 右移3位，相当于除以8
-
-    // 检查进程数量是否合理
-    adrp x1, max_pids@PAGE
-    add x1, x1, max_pids@PAGEOFF
-    ldr x1, [x1]
-    cmp x19, x1
-    b.gt _error_too_many
+    // 计算进程数量
+    ldr x19, [sp]
+    lsr x19, x19, #3  // 除以8，得到进程数量
 
     // 打印进程数量
     adrp x0, count_msg@PAGE
     add x0, x0, count_msg@PAGEOFF
     mov x1, x19
     bl _printf
+
+    // 恢复栈
+    add sp, sp, #16
 
     // 获取用户输入的进程名
     sub sp, sp, #256
@@ -97,29 +94,22 @@ _loop:
     // 获取当前进程ID
     ldr x24, [x23, x22, lsl #3]
 
-    // 为进程路径分配栈空间
-    sub sp, sp, #1024
+    // 为进程名称分配栈空间
+    sub sp, sp, #32
     mov x25, sp
 
-    // 调用proc_pidpath获取进程路径
+    // 调用proc_name获取进程名称
     mov x0, x24  // 进程ID
     mov x1, x25  // 缓冲区
-    mov x2, #1024  // 缓冲区大小
-    bl _proc_pidpath
+    mov x2, #32  // 缓冲区大小
+    bl _proc_name
 
     // 检查返回值
     cmp x0, #0
-    b.le _continue_loop
-
-    // 获取进程名（最后一个'/'之后的部分）
-    mov x0, x25
-    mov x1, #47  // '/'的ASCII码
-    bl _strrchr
-    cmp x0, #0
     b.eq _continue_loop
-    add x0, x0, #1  // 移过'/'
 
     // 比较进程名
+    mov x0, x25  // 获取到的进程名
     mov x1, x20  // 用户输入的进程名
     bl _strcmp
     cmp x0, #0
@@ -134,7 +124,7 @@ _loop:
 
 _continue_loop:
     // 恢复栈
-    add sp, sp, #1024
+    add sp, sp, #32
 
     // 增加循环计数器
     add x22, x22, #1
@@ -150,25 +140,6 @@ _error_proc_list:
     // 打印错误消息
     adrp x0, error_proc_list_msg@PAGE
     add x0, x0, error_proc_list_msg@PAGEOFF
-    bl _printf
-    b _exit
-
-_error_too_many_bytes:
-    // 打印错误消息：返回的字节数过多
-    adrp x0, error_too_many_bytes_msg@PAGE
-    add x0, x0, error_too_many_bytes_msg@PAGEOFF
-    mov x1, x0
-    bl _printf
-    b _exit
-
-_error_too_many:
-    // 打印错误消息：进程数量过多
-    adrp x0, error_too_many_msg@PAGE
-    add x0, x0, error_too_many_msg@PAGEOFF
-    mov x1, x19
-    adrp x2, max_pids@PAGE
-    add x2, x2, max_pids@PAGEOFF
-    ldr x2, [x2]
     bl _printf
     b _exit
 
@@ -192,14 +163,8 @@ _exit:
 .section __TEXT,__cstring
 start_msg:
     .asciz "程序开始执行\n"
-raw_return_msg:
-    .asciz "proc_listallpids 原始返回值（字节数）: %d\n"
 error_proc_list_msg:
     .asciz "获取进程列表失败\n"
-error_too_many_bytes_msg:
-    .asciz "错误：返回的字节数超过了缓冲区大小\n"
-error_too_many_msg:
-    .asciz "错误：进程数量 (%d) 超过最大限制 (%d)\n"
 error_read_input_msg:
     .asciz "错误：读取用户输入失败\n"
 count_msg:
