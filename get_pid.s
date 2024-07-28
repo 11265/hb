@@ -124,11 +124,21 @@ _find_loop:
     ldr w4, [x0, x3, lsl #2]  // 加载 PID
     str w4, [sp, #32]  // 保存当前 PID
 
-    // 打印正在检查的 PID
+    // 打印正在检查的 PID 和索引
     adrp x0, debug_checking_pid@PAGE
     add x0, x0, debug_checking_pid@PAGEOFF
-    ldr w1, [sp, #32]
+    mov w1, w3
+    ldr w2, [sp, #36]
+    ldr w3, [sp, #32]
     bl _printf
+
+    // 检查 PID 是否有效 (大于 0 且小于 99999)
+    ldr w4, [sp, #32]
+    cmp w4, #0
+    ble _continue_loop
+    mov w5, #99999
+    cmp w4, w5
+    bgt _continue_loop
 
     // 获取进程名称
     sub sp, sp, #1024
@@ -155,6 +165,7 @@ _find_loop:
 
 _continue_loop:
     add sp, sp, #1024
+    ldr w3, [sp, #-1036]  // 恢复索引
     add w3, w3, #1
     b _find_loop
 
@@ -199,7 +210,7 @@ debug_end:
 debug_alloc_failed:
     .asciz "Debug: Memory allocation failed\n"
 debug_checking_pid:
-    .asciz "Debug: Checking PID %d\n"
+    .asciz "Debug: Checking index %d/%d, PID %d\n"
 debug_proc_name:
     .asciz "Debug: Process name: %s\n"
 debug_find_start:
