@@ -31,57 +31,47 @@ _main:
     cmp x0, #0
     b.le _error_read
 
-    // 执行ps命令
-    adrp x0, ps_command@PAGE
-    add x0, x0, ps_command@PAGEOFF
-    adrp x1, read_mode@PAGE
-    add x1, x1, read_mode@PAGEOFF
-    bl _popen
+    // 调用sysctl获取进程列表
+    sub sp, sp, #32
+    mov x21, sp  // 保存mib数组地址
 
-    // 检查popen是否成功
+    // 设置mib数组
+    mov w0, #1
+    str w0, [x21]
+    mov w0, #14
+    str w0, [x21, #4]
+    mov w0, #0
+    str w0, [x21, #8]
+    str w0, [x21, #12]
+    str w0, [x21, #16]
+    str w0, [x21, #20]
+
+    // 调用sysctl
+    mov x0, x21  // mib数组
+    mov w1, #6   // miblen
+    mov x2, #0   // oldp
+    mov x3, sp   // oldlenp (使用栈上的空间)
+    mov x4, #0   // newp
+    mov x5, #0   // newlen
+    mov x16, #202  // sysctl系统调用
+    svc #0x80
+
+    // 检查sysctl调用是否成功
     cmp x0, #0
-    b.eq _error_popen
+    b.ne _error_sysctl
 
-    // 保存文件指针
-    mov x19, x0
-
-    // 打印ps输出
-    adrp x0, ps_output_msg@PAGE
-    add x0, x0, ps_output_msg@PAGEOFF
-    bl _puts
-
-    // 为读取缓冲区分配栈空间
-    sub sp, sp, #1024
-    mov x21, sp
-
-_read_loop:
-    // 读取一行
-    mov x0, x21
-    mov x1, #1024
-    mov x2, x19
-    bl _fgets
-
-    // 检查是否读到EOF
-    cmp x0, #0
-    b.eq _end_read
-
-    // 打印读取的行
-    mov x0, x21
+    // 打印获取到的大小
+    ldr x1, [sp]
+    adrp x0, size_msg@PAGE
+    add x0, x0, size_msg@PAGEOFF
     bl _printf
-
-    b _read_loop
-
-_end_read:
-    // 关闭文件
-    mov x0, x19
-    bl _pclose
 
     b _exit
 
-_error_popen:
-    // 打印popen错误消息
-    adrp x0, error_popen_msg@PAGE
-    add x0, x0, error_popen_msg@PAGEOFF
+_error_sysctl:
+    // 打印sysctl错误消息
+    adrp x0, error_sysctl_msg@PAGE
+    add x0, x0, error_sysctl_msg@PAGEOFF
     bl _puts
     b _exit
 
@@ -106,14 +96,10 @@ start_msg:
     .asciz "程序开始执行"
 input_prompt:
     .asciz "请输入要查找的进程名称: "
-ps_command:
-    .asciz "ps -e"
-read_mode:
-    .asciz "r"
-ps_output_msg:
-    .asciz "ps命令输出："
-error_popen_msg:
-    .asciz "错误：无法执行ps命令"
+size_msg:
+    .asciz "获取到的进程信息大小: %d 字节\n"
+error_sysctl_msg:
+    .asciz "错误：调用sysctl失败"
 error_read_msg:
     .asciz "错误：读取输入失败"
 end_msg:
