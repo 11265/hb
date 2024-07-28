@@ -10,11 +10,20 @@ _get_pid_by_name:
 
     mov x19, x0  // Save process name pointer
 
+    adrp x0, log_entry@PAGE
+    add x0, x0, log_entry@PAGEOFF
+    bl _printf
+
     mov x0, #4096  // 4KB for PID list
     bl _malloc
     cmp x0, #0
     beq _cleanup   // Jump to cleanup if malloc fails
     mov x20, x0  // Save allocated memory pointer
+
+    adrp x0, log_after_malloc@PAGE
+    add x0, x0, log_after_malloc@PAGEOFF
+    mov x1, x20
+    bl _printf
 
     mov x0, #1  // PROC_ALL_PIDS
     mov x1, #0
@@ -56,16 +65,32 @@ _found_pid:
     ldr w0, [x20, x22, lsl #2]  // Return found PID
 
 _cleanup:
+    adrp x1, log_before_free@PAGE
+    add x1, x1, log_before_free@PAGEOFF
+    bl _printf
+
     cmp x20, #0    // Check if buffer pointer is NULL
     beq _exit      // If NULL, skip freeing
-    mov x1, x20
+    mov x0, x20
     bl _free
     mov x20, #0    // Set to NULL after freeing
 
 _exit:
+    adrp x0, log_exit@PAGE
+    add x0, x0, log_exit@PAGEOFF
+    bl _printf
+
     ldp x29, x30, [sp], #16
     ldp x21, x22, [sp], #16
     ldp x19, x20, [sp], #16
     ret
 
 .section __DATA,__data
+log_entry:
+    .asciz "Entered get_pid_by_name\n"
+log_after_malloc:
+    .asciz "After malloc, buffer at: %p\n"
+log_before_free:
+    .asciz "Before free, PID: %d\n"
+log_exit:
+    .asciz "Exiting get_pid_by_name\n"
