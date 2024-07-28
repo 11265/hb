@@ -7,7 +7,7 @@ _main:
     mov x0, #1
     adrp x1, message@PAGE
     add x1, x1, message@PAGEOFF
-    mov x2, #21
+    mov x2, #15  // 修改为正确的长度
     mov x16, #4
     svc #0x80
 
@@ -15,14 +15,15 @@ _main:
     bl _get_pid
     mov x20, x0  // 保存当前进程 ID
 
-    // 打印当前进程 ID
+    // 打印当前进程 ID 消息
     mov x0, #1
     adrp x1, current_pid_message@PAGE
     add x1, x1, current_pid_message@PAGEOFF
-    mov x2, #13  // 修改为正确的长度
+    mov x2, #13  // 确保这个长度是正确的
     mov x16, #4
     svc #0x80
 
+    // 打印当前进程 ID 数字
     mov x0, x20
     bl _print_number
 
@@ -41,7 +42,7 @@ _main:
     // 保存找到的 PID
     mov x19, x0
 
-    // 打印找到的进程 ID
+    // 打印找到的进程 ID 消息
     mov x0, #1
     adrp x1, found_pid_message@PAGE
     add x1, x1, found_pid_message@PAGEOFF
@@ -49,6 +50,7 @@ _main:
     mov x16, #4
     svc #0x80
 
+    // 打印找到的进程 ID 数字
     mov x0, x19
     bl _print_number
 
@@ -59,7 +61,7 @@ _not_found:
     mov x0, #1
     adrp x1, not_found_message@PAGE
     add x1, x1, not_found_message@PAGEOFF
-    mov x2, #35  // 修改为正确的长度
+    mov x2, #36  // 增加长度以确保完整显示
     mov x16, #4
     svc #0x80
 
@@ -93,4 +95,4 @@ not_found_message:
 newline:
     .asciz "\n"
 process_name:
-    .asciz "SpringBoard"  // 修改为更可能找到的进程名
+    .asciz "SpringBoard"
