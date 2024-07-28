@@ -23,12 +23,15 @@ jobs:
 
       - name: Build assembly code
         run: |
-          # 编译每个汇编文件
-          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -c main.s -o main.o
-          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -c get_pid.s -o get_pid.o
-          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -c print_number.s -o print_number.o
+          # 编译 C 文件
+          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -c print_number.c -o print_number.o
+          
+          # 汇编汇编文件
+          xcrun -sdk iphoneos as -arch arm64 -o main.o main.s
+          xcrun -sdk iphoneos as -arch arm64 -o get_pid.o get_pid.s
+          
           # 链接生成可执行文件
-          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -o main main.o get_pid.o print_number.o -e _main -lSystem -nostdlib
+          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 main.o get_pid.o print_number.o -o main
 
       - name: List output files
         run: ls -la
