@@ -1,67 +1,50 @@
 .section __TEXT,__text
 .globl _main
-.align 2
+.p2align 2
 
 _main:
-    // Save frame pointer and link register
     stp x29, x30, [sp, #-16]!
     mov x29, sp
 
-    // Print initial message
-    adrp x0, message@PAGE
-    add x0, x0, message@PAGEOFF
+    adrp x0, msg@PAGE
+    add x0, x0, msg@PAGEOFF
     bl _printf
 
-    // Get and print current PID
     bl _getpid
-    mov x1, x0
-    adrp x0, current_pid_format@PAGE
-    add x0, x0, current_pid_format@PAGEOFF
+    mov x19, x0
+
+    adrp x0, pid_msg@PAGE
+    add x0, x0, pid_msg@PAGEOFF
+    mov x1, x19
     bl _printf
 
-    // Print message before calling get_pid_by_name
-    adrp x0, before_call_msg@PAGE
-    add x0, x0, before_call_msg@PAGEOFF
+    adrp x0, before_call@PAGE
+    add x0, x0, before_call@PAGEOFF
     bl _printf
 
-    // Call get_pid_by_name
-    adrp x0, process_name@PAGE
-    add x0, x0, process_name@PAGEOFF
+    adrp x0, target_process@PAGE
+    add x0, x0, target_process@PAGEOFF
     bl _get_pid_by_name
 
-    // Check return value
-    cmp x0, #-1
-    beq .Lnot_found
+    mov x20, x0
 
-    // Print found PID
-    mov x1, x0
-    adrp x0, found_format@PAGE
-    add x0, x0, found_format@PAGEOFF
-    bl _printf
-    b .Lexit
-
-.Lnot_found:
-    // Print not found message
-    adrp x0, not_found_msg@PAGE
-    add x0, x0, not_found_msg@PAGEOFF
+    adrp x0, result_msg@PAGE
+    add x0, x0, result_msg@PAGEOFF
+    mov x1, x20
     bl _printf
 
-.Lexit:
-    // Restore frame pointer and link register
+    mov x0, #0
     ldp x29, x30, [sp], #16
-    mov w0, #0
     ret
 
 .section __DATA,__data
-message:
+msg:
     .asciz "iOS Assembly!\n"
-current_pid_format:
+pid_msg:
     .asciz "Current PID: %d\n"
-before_call_msg:
+before_call:
     .asciz "Before calling get_pid_by_name\n"
-process_name:
-    .asciz "SpringBoard"
-found_format:
+result_msg:
     .asciz "Found PID: %d\n"
-not_found_msg:
-    .asciz "Process not found\n"
+target_process:
+    .asciz "pvz"  // 替换为您想要查找的进程名
