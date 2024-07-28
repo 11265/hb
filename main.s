@@ -3,8 +3,7 @@
 mib:
     .long 1, 14, 0, 0
 miblen:
-    .long 4
-    .long 0
+    .quad 4
 buffer_size:
     .quad 1048576  // 1MB
 process_name:
@@ -51,13 +50,22 @@ _main:
     add x0, x0, mib@PAGEOFF
     str x0, [sp]
     adrp x1, miblen@PAGE
-    ldr w1, [x1, miblen@PAGEOFF]
-    str w1, [sp, #8]
+    ldr x1, [x1, miblen@PAGEOFF]
+    str x1, [sp, #8]
     str x19, [sp, #16]  // buffer
     adrp x2, buffer_size@PAGE
-    add x2, x2, buffer_size@PAGEOFF
-    str x2, [sp, #24]  // &size
+    ldr x2, [x2, buffer_size@PAGEOFF]
+    str x2, [sp, #24]  // size
     stp xzr, xzr, [sp, #32]  // 新的参数：NULL, 0
+
+    // 打印 sysctl 参数
+    adrp x0, sysctl_params@PAGE
+    add x0, x0, sysctl_params@PAGEOFF
+    ldr x1, [sp]
+    ldr x2, [sp, #8]
+    ldr x3, [sp, #16]
+    ldr x4, [sp, #24]
+    bl _printf
 
     // 调用 sysctl
     mov x0, sp
@@ -72,74 +80,21 @@ _main:
     add x0, x0, sysctl_success@PAGEOFF
     bl _printf
 
-    // 遍历进程列表
-    mov x20, x19  // x20 = current process
-    adrp x21, buffer_size@PAGE
-    ldr x21, [x21, buffer_size@PAGEOFF]  // x21 = buffer size
-    adrp x22, process_name@PAGE
-    add x22, x22, process_name@PAGEOFF  // x22 = target process name
+    // 清理并退出
+    mov x0, x19
+    bl _free
 
-.loop:
-    // 检查是否还有足够的缓冲区
-    cmp x21, #0
-    ble .buffer_exhausted
-
-    // 打印当前处理的进程信息
-    adrp x0, process_info@PAGE
-    add x0, x0, process_info@PAGEOFF
-    ldr w1, [x20, #24]  // PID
-    add x2, x20, #52    // 进程名
-    bl _printf
-
-    add x0, x20, #52    // 进程名通常在 kp_proc.p_comm
-    mov x1, x22
-    bl _strcmp
-    cbz w0, .found_process
-
-    ldr w23, [x20, #16]  // 获取 kp_proc.p_len
-    cmp w23, #0
-    ble .invalid_length
-
-    add x20, x20, x23  // 移动到下一个进程
-    sub x21, x21, x23
-    b .loop
-
-.found_process:
-    // 进程找到，PID 在 kp_proc.p_pid
-    ldr w0, [x20, #24]
-    // 打印 PID
-    adrp x1, pid_format@PAGE
-    add x1, x1, pid_format@PAGEOFF
-    bl _printf
-    b .cleanup
-
-.buffer_exhausted:
-    adrp x0, buffer_exhausted_msg@PAGE
-    add x0, x0, buffer_exhausted_msg@PAGEOFF
-    bl _printf
-    mov w0, #-1
-    b .cleanup
-
-.invalid_length:
-    adrp x0, invalid_length_msg@PAGE
-    add x0, x0, invalid_length_msg@PAGEOFF
-    bl _printf
-    mov w0, #-1
-    b .cleanup
-
-.not_found:
-    adrp x0, not_found_msg@PAGE
-    add x0, x0, not_found_msg@PAGEOFF
-    bl _printf
-    mov w0, #-1
-    b .cleanup
+    mov w0, #0
+    ldp x29, x30, [sp], #16
+    ret
 
 .malloc_failed:
     adrp x0, malloc_failed_msg@PAGE
     add x0, x0, malloc_failed_msg@PAGEOFF
     bl _printf
     mov w0, #-1
-    b .exit
+    ldp x29, x30, [sp], #16
+    ret
 
 .sysctl_failed:
     bl _errno
@@ -147,16 +102,9 @@ _main:
     adrp x0, sysctl_failed_msg@PAGE
     add x0, x0, sysctl_failed_msg@PAGEOFF
     bl _printf
-    mov w0, #-1
-    b .cleanup
-
-.cleanup:
-    // 释放内存
     mov x0, x19
     bl _free
-
-.exit:
-    // 恢复寄存器并返回
+    mov w0, #-1
     ldp x29, x30, [sp], #16
     ret
 
@@ -167,17 +115,9 @@ malloc_success:
     .asciz "Memory allocated successfully\n"
 sysctl_success:
     .asciz "sysctl call successful\n"
-process_info:
-    .asciz "Processing: PID %d, Name: %s\n"
-pid_format:
-    .asciz "PID found: %d\n"
-not_found_msg:
-    .asciz "Process not found\n"
 malloc_failed_msg:
     .asciz "Memory allocation failed\n"
 sysctl_failed_msg:
     .asciz "sysctl call failed with errno: %d\n"
-buffer_exhausted_msg:
-    .asciz "Buffer exhausted before finding process\n"
-invalid_length_msg:
-    .asciz "Invalid process length encountered\n"
+sysctl_params:
+    .asciz "sysctl params: mib=%p, miblen=%lld, buffer=%p, size=%lld\n"
