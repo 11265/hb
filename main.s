@@ -1,8 +1,3 @@
-.section __DATA,__data
-.align 3
-max_pid:
-    .quad 10000000  // 增加最大PID范围
-
 .section __TEXT,__text
 .globl _main
 .align 2
@@ -45,78 +40,75 @@ _main:
     mov x1, x20
     bl _printf
 
-    // 初始化循环
-    mov x22, #1  // 从PID 1开始
+    // 执行ps命令
+    adrp x0, ps_command@PAGE
+    add x0, x0, ps_command@PAGEOFF
+    adrp x1, read_mode@PAGE
+    add x1, x1, read_mode@PAGEOFF
+    bl _popen
 
-_loop:
-    adrp x0, max_pid@PAGE
-    add x0, x0, max_pid@PAGEOFF
-    ldr x0, [x0]
-    cmp x22, x0
-    b.gt _not_found
+    // 检查popen是否成功
+    cmp x0, #0
+    b.eq _error_popen
 
-    // 为进程信息分配栈空间
+    // 保存文件指针
+    mov x19, x0
+
+    // 为读取缓冲区分配栈空间
     sub sp, sp, #1024
-    mov x23, sp
+    mov x21, sp
 
-    // 调用sysctl获取进程信息
-    mov x0, sp  // mib数组
-    mov x1, #4  // mib长度
-    mov x2, x23  // 输出缓冲区
-    mov x3, #1024  // 缓冲区大小
-    mov x4, #0  // 旧长度
-    mov x5, #0  // 新长度
+_read_loop:
+    // 读取一行
+    mov x0, x21
+    mov x1, #1024
+    mov x2, x19
+    bl _fgets
 
-    // 设置mib: [CTL_KERN, KERN_PROC, KERN_PROC_PID, current_pid]
-    mov w6, #1
-    str w6, [x0], #4
-    mov w6, #14
-    str w6, [x0], #4
-    mov w6, #1
-    str w6, [x0], #4
-    str w22, [x0]
-
-    mov x16, #202  // sysctl系统调用
-    svc #0x80
-
-    // 检查返回值
+    // 检查是否读到EOF
     cmp x0, #0
-    b.ne _continue_loop
+    b.eq _not_found
 
-    // 比较进程名
-    add x0, x23, #0x1A0  // 进程名在结构体中的偏移
-    mov x1, x20  // 用户输入的进程名
-    bl _strcmp
+    // 检查是否包含目标进程名
+    mov x0, x21
+    mov x1, x20
+    bl _strstr
     cmp x0, #0
-    b.ne _continue_loop
+    b.eq _read_loop
 
-    // 找到匹配的进程，打印PID
+    // 找到匹配的进程，提取PID
+    mov x0, x21
+    bl _atoi
+
+    // 打印找到的PID
+    mov x1, x0
     adrp x0, found_msg@PAGE
     add x0, x0, found_msg@PAGEOFF
-    mov x1, x22
     bl _printf
-    b _exit
-
-_continue_loop:
-    // 恢复栈
-    add sp, sp, #1024
-
-    // 增加PID
-    add x22, x22, #1
-    b _loop
+    b _cleanup
 
 _not_found:
     adrp x0, not_found_msg@PAGE
     add x0, x0, not_found_msg@PAGEOFF
     bl _puts
+
+_cleanup:
+    // 关闭文件
+    mov x0, x19
+    bl _pclose
+
+    b _exit
+
+_error_popen:
+    adrp x0, error_popen_msg@PAGE
+    add x0, x0, error_popen_msg@PAGEOFF
+    bl _puts
     b _exit
 
 _error_read_input:
-    // 打印错误消息：读取输入失败
     adrp x0, error_read_input_msg@PAGE
     add x0, x0, error_read_input_msg@PAGEOFF
     bl _puts
-    b _exit
 
 _exit:
     // 打印结束消息
@@ -131,15 +123,21 @@ _exit:
 .section __TEXT,__cstring
 start_msg:
     .asciz "程序开始执行"
-error_read_input_msg:
-    .asciz "错误：读取用户输入失败"
 input_prompt:
     .asciz "请输入要查找的进程名称: "
 input_received_msg:
     .asciz "收到用户输入: %s\n"
+ps_command:
+    .asciz "ps -e"
+read_mode:
+    .asciz "r"
 found_msg:
     .asciz "找到匹配的进程，PID: %d\n"
 not_found_msg:
     .asciz "未找到匹配的进程"
+error_popen_msg:
+    .asciz "错误：无法执行ps命令"
+error_read_input_msg:
+    .asciz "错误：读取用户输入失败"
 end_msg:
     .asciz "程序执行结束"
