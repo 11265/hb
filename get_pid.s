@@ -46,7 +46,7 @@ _proc_listpids_loop:
     bl _printf
 
     // 调用 proc_listpids
-    mov x0, #1  // PROC_ALL_PIDS
+    mov w0, #1  // PROC_ALL_PIDS
     mov x1, #0  // 起始偏移量总是 0
     mov x2, x20 // 缓冲区起始地址
     mov x3, x23 // 缓冲区大小
@@ -56,7 +56,7 @@ _proc_listpids_loop:
     cmp x0, #0
     ble _proc_listpids_done
     cmp x0, x23
-    bgt _buffer_overflow
+    bhi _buffer_overflow
 
     mov x26, x0  // 保存这次返回的字节数
     
@@ -89,7 +89,7 @@ _pid_loop:
     add x21, x21, #1
     lsl x22, x21, #2
     cmp x22, x26
-    blt _pid_loop
+    blo _pid_loop
 
     // 如果处理完所有 PID 还没找到，退出循环
     b _proc_listpids_done
@@ -100,19 +100,20 @@ _buffer_overflow:
     add x0, x0, debug_buffer_overflow@PAGEOFF
     mov x1, x0
     bl _printf
-    mov x0, #-2  // 错误代码
+    mov w0, #-2  // 错误代码
     b _cleanup
 
 _proc_listpids_done:
-    mov x0, #0  // 未找到进程
+    mov w0, #0  // 未找到进程
     b _cleanup
 
 _found_pid:
     ldr w0, [x20, x21, lsl #2]  // 返回找到的 PID
 
     // 打印调试信息
-    adrp x1, debug_found@PAGE
-    add x1, x1, debug_found@PAGEOFF
+    adrp x0, debug_found@PAGE
+    add x0, x0, debug_found@PAGEOFF
+    mov w1, w0
     bl _printf
 
 _cleanup:
@@ -127,7 +128,7 @@ _cleanup:
     b _exit
 
 _allocation_failed:
-    mov x0, #-1  // 返回错误码
+    mov w0, #-1  // 返回错误码
 
     // 打印调试信息
     adrp x0, debug_alloc_failed@PAGE
