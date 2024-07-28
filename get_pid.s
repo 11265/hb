@@ -11,6 +11,7 @@ _get_pid_by_name:
     // 打印调试信息
     adrp x0, debug_start@PAGE
     add x0, x0, debug_start@PAGEOFF
+    ldr x1, [sp, #40]
     bl _printf
 
     // 分配固定大小的缓冲区（64KB）
@@ -41,12 +42,6 @@ _get_pid_by_name:
     cmp w0, #0
     ble _proc_listpids_done
 
-    // 打印原始返回值
-    adrp x0, debug_listpids_raw@PAGE
-    add x0, x0, debug_listpids_raw@PAGEOFF
-    ldr w1, [sp, #20]
-    bl _printf
-
     // 计算 PID 数量 (字节数 / sizeof(int))
     ldr w1, [sp, #32]  // 缓冲区大小
     cmp w0, w1
@@ -64,7 +59,7 @@ _get_pid_by_name:
     ldr x0, [sp, #24]   // 缓冲区指针
     ldr w1, [sp, #20]   // PID 数量
     ldr x2, [sp, #40]   // 目标进程名称
-    bl _find_pid_in_list
+    bl _find_pid_by_name
 
     str w0, [sp, #16]  // 保存找到的 PID 或错误码
 
@@ -100,8 +95,8 @@ _allocation_failed:
 
     b _cleanup
 
-_find_pid_in_list:
-    // x0: 缓冲区指针
+_find_pid_by_name:
+    // x0: PID 缓冲区指针
     // w1: PID 数量
     // x2: 目标进程名称
     stp x29, x30, [sp, #-16]!
@@ -125,13 +120,6 @@ _find_loop:
     cmp w3, w0
     bhs _find_exit_not_found
 
-    // 打印当前索引和总 PID 数
-    adrp x0, debug_loop_info@PAGE
-    add x0, x0, debug_loop_info@PAGEOFF
-    mov w1, w3  // 当前索引
-    ldr w2, [sp, #36]  // 总 PID 数
-    bl _printf
-
     ldr x0, [sp, #40]
     ldr w4, [x0, x3, lsl #2]  // 加载 PID
     str w4, [sp, #32]  // 保存当前 PID
@@ -150,17 +138,9 @@ _find_loop:
     bl _proc_name
 
     cmp w0, #0
-    bgt _proc_name_success
+    ble _continue_loop
 
-    // 打印 proc_name 失败的调试信息
-    adrp x0, debug_proc_name_failed@PAGE
-    add x0, x0, debug_proc_name_failed@PAGEOFF
-    ldr w1, [sp, #1056]  // 当前 PID
-    bl _printf
-    b _continue_loop
-
-_proc_name_success:
-    // 打印调试信息
+    // 打印进程名称
     adrp x0, debug_proc_name@PAGE
     add x0, x0, debug_proc_name@PAGEOFF
     mov x1, sp
@@ -175,7 +155,6 @@ _proc_name_success:
 
 _continue_loop:
     add sp, sp, #1024
-
     add w3, w3, #1
     b _find_loop
 
@@ -208,13 +187,11 @@ _find_exit:
 
 .section __DATA,__data
 debug_start:
-    .asciz "Debug: Starting get_pid_by_name\n"
+    .asciz "Debug: Starting get_pid_by_name for process '%s'\n"
 debug_malloc:
     .asciz "Debug: Malloc returned %p (size: %d)\n"
-debug_listpids_raw:
-    .asciz "Debug: proc_listpids raw return value: %d\n"
 debug_listpids:
-    .asciz "Debug: Calculated number of PIDs: %d\n"
+    .asciz "Debug: proc_listpids returned %d PIDs\n"
 debug_found:
     .asciz "Debug: Found PID %d\n"
 debug_end:
@@ -225,10 +202,6 @@ debug_checking_pid:
     .asciz "Debug: Checking PID %d\n"
 debug_proc_name:
     .asciz "Debug: Process name: %s\n"
-debug_loop_info:
-    .asciz "Debug: Checking PID index %d/%d\n"
-debug_proc_name_failed:
-    .asciz "Debug: proc_name failed for PID %d\n"
 debug_find_start:
     .asciz "Debug: Starting to find PID in list of %d PIDs\n"
 debug_find_end:
