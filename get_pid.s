@@ -15,6 +15,9 @@ _get_pid_by_name:
     bl _malloc
     mov x20, x0  // 保存分配的内存指针
 
+    // 检查内存分配是否成功
+    cbz x20, _allocation_failed
+
     // 调用 proc_listpids 获取所有 PID
     mov x0, #1  // PROC_ALL_PIDS
     mov x1, #0
@@ -61,7 +64,12 @@ _found_pid:
 _cleanup:
     mov x1, x20
     bl _free
+    b _exit
 
+_allocation_failed:
+    mov x0, #-1  // 返回错误码
+
+_exit:
     ldp x29, x30, [sp], #16
     ldp x21, x22, [sp], #16
     ldp x19, x20, [sp], #16
