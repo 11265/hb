@@ -1,7 +1,7 @@
 .section __DATA,__data
 .align 3
 max_pid:
-    .quad 99999  // 假设最大PID为99999
+    .quad 10000000  // 增加最大PID范围
 
 .section __TEXT,__text
 .globl _main
@@ -39,6 +39,12 @@ _main:
     sub x21, x21, #1
     strb wzr, [x20, x21]
 
+    // 打印用户输入
+    adrp x0, input_received_msg@PAGE
+    add x0, x0, input_received_msg@PAGEOFF
+    mov x1, x20
+    bl _printf
+
     // 初始化循环
     mov x22, #1  // 从PID 1开始
 
@@ -49,22 +55,36 @@ _loop:
     cmp x22, x0
     b.gt _not_found
 
-    // 为进程名称分配栈空间
-    sub sp, sp, #32
+    // 为进程信息分配栈空间
+    sub sp, sp, #1024
     mov x23, sp
 
-    // 调用proc_name获取进程名称
-    mov x0, x22  // 当前PID
-    mov x1, x23  // 缓冲区
-    mov x2, #32  // 缓冲区大小
-    bl _proc_name
+    // 调用sysctl获取进程信息
+    mov x0, sp  // mib数组
+    mov x1, #4  // mib长度
+    mov x2, x23  // 输出缓冲区
+    mov x3, #1024  // 缓冲区大小
+    mov x4, #0  // 旧长度
+    mov x5, #0  // 新长度
+
+    // 设置mib: [CTL_KERN, KERN_PROC, KERN_PROC_PID, current_pid]
+    mov w6, #1
+    str w6, [x0], #4
+    mov w6, #14
+    str w6, [x0], #4
+    mov w6, #1
+    str w6, [x0], #4
+    str w22, [x0]
+
+    mov x16, #202  // sysctl系统调用
+    svc #0x80
 
     // 检查返回值
     cmp x0, #0
-    b.eq _continue_loop
+    b.ne _continue_loop
 
     // 比较进程名
-    mov x0, x23  // 获取到的进程名
+    add x0, x23, #0x1A0  // 进程名在结构体中的偏移
     mov x1, x20  // 用户输入的进程名
     bl _strcmp
     cmp x0, #0
@@ -79,7 +99,7 @@ _loop:
 
 _continue_loop:
     // 恢复栈
-    add sp, sp, #32
+    add sp, sp, #1024
 
     // 增加PID
     add x22, x22, #1
@@ -115,6 +135,8 @@ error_read_input_msg:
     .asciz "错误：读取用户输入失败"
 input_prompt:
     .asciz "请输入要查找的进程名称: "
+input_received_msg:
+    .asciz "收到用户输入: %s\n"
 found_msg:
     .asciz "找到匹配的进程，PID: %d\n"
 not_found_msg:
