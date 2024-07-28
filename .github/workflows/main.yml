@@ -1,4 +1,4 @@
-name: Build Assembly Code for iOS
+name: Build Assembly and C Code for iOS
 
 on:
   push:
@@ -37,31 +37,38 @@ jobs:
         run: |
           ls -la
           cat main.s
+          cat get_pvz_pid.c
+
+      - name: Compile C code
+        run: |
+          set -x
+          xcrun -sdk iphoneos clang -c -arch arm64 -o get_pvz_pid.o get_pvz_pid.c
 
       - name: Build assembly code
         run: |
           set -x
           xcrun -sdk iphoneos as -arch arm64 -o main.o main.s
 
-      - name: Link object file
+      - name: Link object files
         run: |
           set -x
-          xcrun -sdk iphoneos clang -arch arm64 -o main main.o
+          xcrun -sdk iphoneos clang -arch arm64 -o find_pvz main.o get_pvz_pid.o
 
       - name: List output files
         run: ls -la
 
       - name: Display file information
         run: |
-          file main
-          otool -hv main
+          file find_pvz
+          otool -hv find_pvz
           echo "Object file content:"
           hexdump -C main.o | head -n 20
+          hexdump -C get_pvz_pid.o | head -n 20
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
-          name: ARM64
+          name: ARM64_PVZ_Finder
           path: |
-            main
+            find_pvz
           retention-days: 30
