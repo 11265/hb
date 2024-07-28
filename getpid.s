@@ -18,15 +18,15 @@ _main:
     // 保存 PID
     mov x19, x0
 
-    // 打印 "PID:" 消息
+    // 打印 "PID: " 消息
     mov x0, #1
     adrp x1, pid_message@PAGE
     add x1, x1, pid_message@PAGEOFF
-    mov x2, #4
+    mov x2, #5  // 改为 5，包括空格
     mov x16, #4
     svc #0x80
 
-// 打印实际的 PID 数字
+    // 打印实际的 PID 数字
     mov x0, x19
     bl _print_number
 
@@ -51,35 +51,41 @@ _get_pid:
 _print_number:
     // 为临时缓冲区分配栈空间
     sub sp, sp, #16
-    mov x1, x0                     // 备份 PID
-    add x2, sp, #15                // 指向临时缓冲区末尾
-    mov x3, #0                     // 累计字符数
-    mov x4, #48                    // 数字 '0' 的 ASCII 值
-    mov x7, #10                    // 数字 10
+    mov x1, sp       // 使用栈顶作为缓冲区
+    mov x2, #0       // 字符计数器
 
-_print_digit:
-    udiv x5, x1, x7                // 计算 x1 / 10
-    msub x6, x5, x7, x1            // 计算余数 x1 - (x5 * 10)
-    add x6, x6, x4                 // 转换为字符
-    strb w6, [x2]                  // 存储字符
-    sub x2, x2, #1                 // 移动指针到缓冲区前一个位置
-    mov x1, x5                     // 更新 x1 为商
-    add x3, x3, #1                 // 增加字符数
-    cmp x1, #0                     // 检查是否结束
-    bne _print_digit               // 如果不是 0，继续
+_convert_loop:
+    mov x3, #10
+    udiv x4, x0, x3  // x4 = x0 / 10
+    msub x5, x4, x3, x0  // x5 = x0 - (x4 * 10)
+    add x5, x5, #48  // 转换为 ASCII
+    strb w5, [x1, x2]  // 存储到缓冲区
+    add x2, x2, #1   // 增加计数器
+    mov x0, x4       // 更新 x0 为商
+    cbnz x0, _convert_loop  // 如果不为 0，继续循环
 
-    add x2, x2, #1                 // 调整指针到第一个数字
-    mov x0, #1                     // 文件描述符: stdout
-    mov x16, #4                    // syscall: write
-    svc #0x80                      // 输出字符
+_reverse_and_print:
+    mov x0, #1       // 文件描述符：stdout
+    mov x3, x2       // 保存字符数量
+_reverse_loop:
+    sub x2, x2, #1   // 从最后一个字符开始
+    ldrb w4, [x1, x2]  // 加载字符
+    strb w4, [sp, x3]  // 存储到正确的位置
+    sub x3, x3, #1
+    cbnz x3, _reverse_loop
 
-    add sp, sp, #16                // 恢复栈指针
-    ret                            // 返回主程序
+    mov x1, sp       // 缓冲区地址
+    mov x2, x3       // 字符数量
+    mov x16, #4      // write 系统调用
+    svc #0x80
+
+    add sp, sp, #16  // 恢复栈
+    ret
 
 .section __DATA,__data
 message:
     .asciz "Hello, iOS Assembly!\n"
 pid_message:
-    .asciz "PID:"
+    .asciz "PID: "  // 添加了一个空格
 newline:
     .asciz "\n"
