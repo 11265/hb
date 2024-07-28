@@ -1,9 +1,9 @@
 .section __DATA,__data
 .align 3
 pids:
-    .space 4*1024  // 假设最多1024个进程，每个进程ID占4字节
+    .space 4*100  // 假设最多100个进程，每个进程ID占4字节
 max_pids:
-    .long 1024
+    .long 100
 
 .section __TEXT,__text
 .globl _main
@@ -21,12 +21,14 @@ _main:
     // 调用proc_listallpids获取所有进程ID
     adrp x0, pids@PAGE
     add x0, x0, pids@PAGEOFF
-    mov x1, #4096  // 4*1024
+    mov x1, #400  // 4*100
     bl _proc_listallpids
 
     // 检查返回值
     cmp x0, #0
     b.le _error_proc_list
+    cmp x0, #400
+    b.gt _error_too_many_bytes
 
     // 保存返回的字节数
     mov x19, x0
@@ -38,8 +40,7 @@ _main:
     bl _printf
 
     // 计算实际进程数量（字节数除以4）
-    mov x20, #4
-    udiv x19, x19, x20
+    lsr x19, x19, #2  // 右移2位，相当于除以4
 
     // 检查进程数量是否合理
     adrp x1, max_pids@PAGE
@@ -108,6 +109,14 @@ _error_proc_list:
     bl _printf
     b _exit
 
+_error_too_many_bytes:
+    // 打印错误消息：返回的字节数过多
+    adrp x0, error_too_many_bytes_msg@PAGE
+    add x0, x0, error_too_many_bytes_msg@PAGEOFF
+    mov x1, x0
+    bl _printf
+    b _exit
+
 _error_too_many:
     // 打印错误消息：进程数量过多
     adrp x0, error_too_many_msg@PAGE
@@ -136,6 +145,8 @@ raw_return_msg:
     .asciz "proc_listallpids 原始返回值（字节数）: %d\n"
 error_proc_list_msg:
     .asciz "获取进程列表失败\n"
+error_too_many_bytes_msg:
+    .asciz "错误：返回的字节数超过了缓冲区大小\n"
 error_too_many_msg:
     .asciz "错误：进程数量 (%d) 超过最大限制 (%d)\n"
 count_msg:
