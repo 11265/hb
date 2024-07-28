@@ -62,7 +62,8 @@ _main:
     bl _proc_listpids
 
     // 计算进程数量
-    udiv x23, x0, #4  // x23 保存进程数量
+    mov x23, #4
+    udiv x23, x0, x23  // x23 保存进程数量
 
     // 打印进程数量
     mov x1, x23
