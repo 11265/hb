@@ -46,8 +46,12 @@ jobs:
             getpid.o
           retention-days: 3
 
-      - name: Clean up old artifacts
-        uses: c-hive/gha-remove-artifacts@v1
+      - name: Delete old artifacts
+        uses: actions/github-script@v6
+        if: success() || failure()  # Run this step regardless of job outcome
         with:
-          age: '1 week'
-          skip-recent: 5
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            const script = require('${{github.workspace}}/.github/workflows/delete-old-artifacts.js')
+            console.log("About to run script")
+            await script({github, context})
