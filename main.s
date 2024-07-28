@@ -93,4 +93,4 @@ not_found_message:
 newline:
     .asciz "\n"
 process_name:
-    .asciz "YourProcessName"
+    .asciz "pvz"
