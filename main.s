@@ -1,11 +1,9 @@
 .section __DATA,__data
 .align 3
-buffer:
-    .space 1024*1024  // 1MB用于进程信息的缓冲区
-buffer_size:
-    .quad 1024*1024
 pids:
     .space 4*1024  // 假设最多1024个进程，每个进程ID占4字节
+max_pids:
+    .long 1024
 
 .section __TEXT,__text
 .globl _main
@@ -23,10 +21,17 @@ _main:
 
     // 检查返回值
     cmp x0, #0
-    b.le _error
+    b.le _error_proc_list
 
     // 保存进程数量
     mov x19, x0
+
+    // 检查进程数量是否合理
+    adrp x1, max_pids@PAGE
+    add x1, x1, max_pids@PAGEOFF
+    ldr w1, [x1]
+    cmp x19, x1
+    b.gt _error_too_many
 
     // 打印进程数量
     adrp x0, count_msg@PAGE
@@ -75,12 +80,23 @@ _skip_print:
     add x20, x20, #1
     b _loop
 
-_error:
+_error_proc_list:
     // 打印错误消息
-    adrp x0, error_msg@PAGE
-    add x0, x0, error_msg@PAGEOFF
-    mov x1, x0
+    adrp x0, error_proc_list_msg@PAGE
+    add x0, x0, error_proc_list_msg@PAGEOFF
     bl _printf
+    b _exit
+
+_error_too_many:
+    // 打印错误消息：进程数量过多
+    adrp x0, error_too_many_msg@PAGE
+    add x0, x0, error_too_many_msg@PAGEOFF
+    mov x1, x19
+    adrp x2, max_pids@PAGE
+    add x2, x2, max_pids@PAGEOFF
+    ldr w2, [x2]
+    bl _printf
+    b _exit
 
 _exit:
     mov x0, #0
@@ -88,8 +104,10 @@ _exit:
     svc #0x80
 
 .section __TEXT,__cstring
-error_msg:
+error_proc_list_msg:
     .asciz "获取进程列表失败\n"
+error_too_many_msg:
+    .asciz "错误：进程数量 (%d) 超过最大限制 (%d)\n"
 count_msg:
     .asciz "进程数量: %d\n"
 process_info_msg:
