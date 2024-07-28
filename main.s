@@ -39,25 +39,32 @@ _main:
     add x0, x0, success_msg@PAGEOFF
     bl _printf
 
-    // 处理缓冲区以打印所有进程名称
+    // 获取返回的实际大小
+    adrp x21, buffer_size@PAGE
+    add x21, x21, buffer_size@PAGEOFF
+    ldr x21, [x21]  // x21 = 实际返回的大小
+
+    // 计算结构体数量
+    mov x22, #0x230  // kinfo_proc结构体大小 (可能需要根据系统调整)
+    udiv x23, x21, x22  // x23 = 结构体数量
+
+    // 初始化循环
     adrp x19, buffer@PAGE
     add x19, x19, buffer@PAGEOFF  // x19 = buffer起始地址
-    adrp x20, buffer_size@PAGE
-    add x20, x20, buffer_size@PAGEOFF
-    ldr x20, [x20]  // x20 = buffer实际大小
-    add x20, x19, x20  // x20 = buffer结束地址
+    mov x24, #0  // 计数器
 
 _loop:
-    cmp x19, x20
+    cmp x24, x23
     b.ge _exit
 
     // 打印进程名称
     adrp x0, process_name_msg@PAGE
     add x0, x0, process_name_msg@PAGEOFF
-    add x1, x19, #0x1ac  // p_comm在kinfo_proc中的偏移
+    add x1, x19, #0x1ac  // p_comm在kinfo_proc中的偏移 (可能需要根据系统调整)
     bl _printf
 
-    add x19, x19, #0x230  // kinfo_proc结构体大小
+    add x19, x19, x22  // 移动到下一个结构体
+    add x24, x24, #1   // 增加计数器
     b _loop
 
 _error:
