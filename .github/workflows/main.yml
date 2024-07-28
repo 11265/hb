@@ -54,5 +54,5 @@ jobs:
         with:
           name: ARM64
           path: |
-            main.o
+            main
           retention-days: 30
