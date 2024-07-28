@@ -43,12 +43,12 @@ _main:
     mov x0, #0
     svc #0x80
 
-_get_pid:
+_get_pid://获取pid函数
     mov x16, #20     // getpid 系统调用号
     svc #0x80
     ret
 
-_print_number:
+_print_number://打印输出函数
     // 为临时缓冲区分配栈空间
     sub sp, sp, #16
     mov x1, sp       // 使用栈顶作为缓冲区
@@ -88,7 +88,7 @@ _print_result:
 
 .section __DATA,__data
 message:
-    .asciz "Hello, iOS Assembly!\n"
+    .asciz "iOS Assembly!\n"
 pid_message:
     .asciz "PID: "
 newline:
