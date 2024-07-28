@@ -18,12 +18,13 @@ jobs:
 
       - name: Set up Xcode environment
         run: |
-          export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+          sudo xcode-select --switch /Applications/Xcode.app
+          echo "SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)" >> $GITHUB_ENV
 
       - name: Build assembly code
         run: |
-          clang -c -o getpid.o getpid.s -target arm64-apple-ios13.0
-          clang -o getpid getpid.o -target arm64-apple-ios13.0 -sdk $(xcrun --sdk iphoneos --show-sdk-path) -nostdlib -e _main
+          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -c getpid.s -o getpid.o
+          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -o getpid getpid.o -e _main -lSystem -nostdlib
 
       - name: List output files
         run: ls -la getpid
