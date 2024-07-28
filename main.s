@@ -3,66 +3,94 @@
 .p2align 2
 
 _main:
-    // 打印消息
-    mov x0, #1                     // 文件描述符：stdout
-    adrp x1, message@PAGE          // 获取 message 的页地址
-    add x1, x1, message@PAGEOFF    // 添加页内偏移
-    mov x2, #21                    // 消息长度 (包括换行符)
-    mov x16, #4                    // 系统调用号：write
-    svc #0x80                      // 进行系统调用
+    // 打印欢迎消息
+    mov x0, #1
+    adrp x1, message@PAGE
+    add x1, x1, message@PAGEOFF
+    mov x2, #21
+    mov x16, #4
+    svc #0x80
 
-    // 调用获取进程 ID 的函数
+    // 获取当前进程 ID
     bl _get_pid
+    mov x20, x0  // 保存当前进程 ID
 
+    // 打印当前进程 ID
+    mov x0, #1
+    adrp x1, current_pid_message@PAGE
+    add x1, x1, current_pid_message@PAGEOFF
+    mov x2, #16
+    mov x16, #4
+    svc #0x80
 
-    // 加载进程名称地址
+    mov x0, x20
+    bl _print_number
+
+    // 打印换行符
+    bl _print_newline
+
+    // 通过名称获取指定进程 ID
     adrp x0, process_name@PAGE
     add x0, x0, process_name@PAGEOFF
-    
-    // 调用 _get_pid_by_name
     bl _get_pid_by_name
 
     // 检查返回值
     cmp x0, #-1
     beq _not_found
 
-    // 保存 PID 并继续处理...
+    // 保存找到的 PID
+    mov x19, x0
 
-    // 保存 PID
-    mov x19, x0                    // 将 PID 保存到 x19 中
+    // 打印找到的进程 ID
+    mov x0, #1
+    adrp x1, found_pid_message@PAGE
+    add x1, x1, found_pid_message@PAGEOFF
+    mov x2, #21
+    mov x16, #4
+    svc #0x80
 
-    // 打印 "PID: " 消息
-    mov x0, #1                     // 文件描述符：stdout
-    adrp x1, pid_message@PAGE      // 获取 pid_message 的页地址
-    add x1, x1, pid_message@PAGEOFF// 添加页内偏移
-    mov x2, #5                     // 消息长度
-    mov x16, #4                    // 系统调用号：write
-    svc #0x80                      // 进行系统调用
+    mov x0, x19
+    bl _print_number
 
-    // 打印实际的 PID 数字
-    mov x0, x19                    // 将 PID 传递给打印函数
-    bl _print_number               // 调用 _print_number 函数
+    b _exit_program
 
+_not_found:
+    // 打印未找到进程的消息
+    mov x0, #1
+    adrp x1, not_found_message@PAGE
+    add x1, x1, not_found_message@PAGEOFF
+    mov x2, #30
+    mov x16, #4
+    svc #0x80
+
+_exit_program:
     // 打印换行符
-    mov x0, #1                     // 文件描述符：stdout
-    adrp x1, newline@PAGE          // 获取 newline 的页地址
-    add x1, x1, newline@PAGEOFF    // 添加页内偏移
-    mov x2, #1                     // 消息长度
-    mov x16, #4                    // 系统调用号：write
-    svc #0x80                      // 进行系统调用
+    bl _print_newline
 
     // 退出程序
-    mov x16, #1                    // 系统调用号：exit
-    mov x0, #0                     // 退出码
-    svc #0x80                      // 进行系统调用
+    mov x16, #1
+    mov x0, #0
+    svc #0x80
+
+_print_newline:
+    mov x0, #1
+    adrp x1, newline@PAGE
+    add x1, x1, newline@PAGEOFF
+    mov x2, #1
+    mov x16, #4
+    svc #0x80
+    ret
 
 .section __DATA,__data
 message:
-    .asciz "iOS Assembly!\n"       // 输出的消息
-pid_message:
-    .asciz "PID: "                 // PID 前缀消息
+    .asciz "iOS Assembly!\n"
+current_pid_message:
+    .asciz "Current PID: "
+found_pid_message:
+    .asciz "Found process PID: "
+not_found_message:
+    .asciz "Process not found or error occurred"
 newline:
-    .asciz "\n"                    // 换行符
-
+    .asciz "\n"
 process_name:
     .asciz "YourProcessName"
