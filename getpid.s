@@ -5,7 +5,8 @@ _main:
     mov x0, 1                      // File descriptor: stdout
     mov x1, message                // Message to print
     mov x2, 13                     // Length of message
-    mov x16, 0x2000004             // syscall number for write
+    movz x16, 0x2000, lsl #16
+    movk x16, 0x0004
     svc 0                          // Make the syscall
     mov x16, 0x2000001             // syscall number for exit
     mov x0, 0                      // Exit code
