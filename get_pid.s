@@ -14,7 +14,7 @@ _get_pid_by_name:
     add x0, x0, log_entry@PAGEOFF
     bl _printf
 
-    mov x0, #4096  // 4KB for PID list
+    mov x0, #8192  // 8KB for PID list
     bl _malloc
     cmp x0, #0
     beq _cleanup   // Jump to cleanup if malloc fails
@@ -28,11 +28,16 @@ _get_pid_by_name:
     mov x0, #1  // PROC_ALL_PIDS
     mov x1, #0
     mov x2, x20  // buffer
-    mov x3, #4096
+    mov x3, #8192
     bl _proc_listpids
 
     cmp x0, #0
     ble _cleanup   // Jump to cleanup if proc_listpids fails or returns 0
+
+    adrp x0, log_after_listpids@PAGE
+    add x0, x0, log_after_listpids@PAGEOFF
+    mov x1, x0
+    bl _printf
 
     mov x21, x0  // Save returned byte count
     mov x22, #0  // PID counter
@@ -40,16 +45,23 @@ _get_pid_by_name:
 _pid_loop:
     ldr w0, [x20, x22, lsl #2]  // Load PID
     
-    sub sp, sp, #1024
-    mov x1, sp
-    mov x2, #1024
+    mov x0, #256  // Allocate 256 bytes for process name
+    bl _malloc
+    cmp x0, #0
+    beq _cleanup   // Jump to cleanup if malloc fails
+    mov x23, x0  // Save process name buffer
+
+    ldr w0, [x20, x22, lsl #2]  // Load PID again
+    mov x1, x23
+    mov x2, #256
     bl _proc_name
 
     mov x0, x19  // Target process name
-    mov x1, sp   // Current process name
+    mov x1, x23  // Current process name
     bl _strcmp
 
-    add sp, sp, #1024
+    mov x0, x23
+    bl _free
 
     cbz w0, _found_pid  // If matching process name found
 
@@ -90,6 +102,8 @@ log_entry:
     .asciz "Entered get_pid_by_name\n"
 log_after_malloc:
     .asciz "After malloc, buffer at: %p\n"
+log_after_listpids:
+    .asciz "After proc_listpids, returned: %d\n"
 log_before_free:
     .asciz "Before free, PID: %d\n"
 log_exit:
