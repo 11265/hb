@@ -41,6 +41,10 @@ _get_pid_by_name:
     cmp w0, #0
     ble _proc_listpids_done
 
+    // 计算 PID 数量
+    lsr w0, w0, #2
+    str w0, [sp, #20]  // 保存 PID 数量
+
     // 打印调试信息
     adrp x0, debug_listpids@PAGE
     add x0, x0, debug_listpids@PAGEOFF
@@ -49,8 +53,8 @@ _get_pid_by_name:
 
     // 处理返回的 PID 列表
     ldr x0, [sp, #24]   // 缓冲区指针
-    ldr w1, [sp, #20]   // 返回的字节数
-    ldr x2, [sp, #40]  // 目标进程名称
+    ldr w1, [sp, #20]   // PID 数量
+    ldr x2, [sp, #40]   // 目标进程名称
     bl _find_pid_in_list
 
     str w0, [sp, #16]  // 保存找到的 PID 或错误码
@@ -68,6 +72,7 @@ _cleanup:
     // 打印调试信息
     adrp x0, debug_end@PAGE
     add x0, x0, debug_end@PAGEOFF
+    ldr w1, [sp, #16]
     bl _printf
 
     ldr w0, [sp, #16]  // 加载返回值
@@ -88,7 +93,7 @@ _allocation_failed:
 
 _find_pid_in_list:
     // x0: 缓冲区指针
-    // w1: 字节数
+    // w1: PID 数量
     // x2: 目标进程名称
     stp x29, x30, [sp, #-16]!
     mov x29, sp
@@ -97,14 +102,27 @@ _find_pid_in_list:
     str w1, [sp, #36]
     str x2, [sp, #24]
 
+    // 打印开始查找的调试信息
+    adrp x0, debug_find_start@PAGE
+    add x0, x0, debug_find_start@PAGEOFF
+    ldr w1, [sp, #36]
+    bl _printf
+
     mov w3, #0  // 索引
 
 _find_loop:
+    // 打印当前索引和总 PID 数
+    adrp x0, debug_loop_info@PAGE
+    add x0, x0, debug_loop_info@PAGEOFF
+    mov w1, w3  // 当前索引
+    ldr w2, [sp, #36]  // 总 PID 数
+    bl _printf
+
     ldr x0, [sp, #40]
     ldr w4, [x0, x3, lsl #2]  // 加载 PID
     str w4, [sp, #32]  // 保存当前 PID
 
-    // 打印调试信息
+    // 打印正在检查的 PID
     adrp x0, debug_checking_pid@PAGE
     add x0, x0, debug_checking_pid@PAGEOFF
     ldr w1, [sp, #32]
@@ -117,6 +135,17 @@ _find_loop:
     ldr w2, [sp, #1056]  // 加载当前 PID
     bl _proc_name
 
+    cmp w0, #0
+    bgt _proc_name_success
+
+    // 打印 proc_name 失败的调试信息
+    adrp x0, debug_proc_name_failed@PAGE
+    add x0, x0, debug_proc_name_failed@PAGEOFF
+    ldr w1, [sp, #1056]  // 当前 PID
+    bl _printf
+    b _continue_loop
+
+_proc_name_success:
     // 打印调试信息
     adrp x0, debug_proc_name@PAGE
     add x0, x0, debug_proc_name@PAGEOFF
@@ -128,13 +157,13 @@ _find_loop:
     mov x1, sp
     bl _strcmp
 
-    add sp, sp, #1024
-
     cbz w0, _found_pid  // 如果找到匹配的进程名称
 
+_continue_loop:
+    add sp, sp, #1024
+
     add w3, w3, #1
-    ldr w0, [sp, #36]  // 加载字节数
-    lsr w0, w0, #2     // 除以 4 得到 PID 数量
+    ldr w0, [sp, #36]  // 加载 PID 数量
     cmp w3, w0
     blo _find_loop
 
@@ -142,6 +171,7 @@ _find_loop:
     b _find_exit
 
 _found_pid:
+    add sp, sp, #1024
     ldr w0, [sp, #32]  // 返回找到的 PID
 
     // 打印调试信息
@@ -152,6 +182,13 @@ _found_pid:
     bl _printf
 
 _find_exit:
+    // 打印结束查找的调试信息
+    adrp x1, debug_find_end@PAGE
+    add x1, x1, debug_find_end@PAGEOFF
+    mov w2, w0  // 返回值
+    mov x0, x1
+    bl _printf
+
     add sp, sp, #48
     ldp x29, x30, [sp], #16
     ret
@@ -162,14 +199,22 @@ debug_start:
 debug_malloc:
     .asciz "Debug: Malloc returned %p (size: %d)\n"
 debug_listpids:
-    .asciz "Debug: proc_listpids returned %d bytes\n"
+    .asciz "Debug: proc_listpids returned %d PIDs\n"
 debug_found:
     .asciz "Debug: Found PID %d\n"
 debug_end:
-    .asciz "Debug: Ending get_pid_by_name\n"
+    .asciz "Debug: Ending get_pid_by_name, result: %d\n"
 debug_alloc_failed:
     .asciz "Debug: Memory allocation failed\n"
 debug_checking_pid:
     .asciz "Debug: Checking PID %d\n"
 debug_proc_name:
     .asciz "Debug: Process name: %s\n"
+debug_loop_info:
+    .asciz "Debug: Checking PID %d (index %d/%d)\n"
+debug_proc_name_failed:
+    .asciz "Debug: proc_name failed for PID %d\n"
+debug_find_start:
+    .asciz "Debug: Starting to find PID in list of %d PIDs\n"
+debug_find_end:
+    .asciz "Debug: Finished finding PID, result: %d\n"
