@@ -1,6 +1,6 @@
 .section __TEXT,__text
 .globl _main
-.globl 取进程ID
+.globl _get_pid
 .p2align 2
 
 _main:
@@ -13,7 +13,7 @@ _main:
     svc #0x80                      // 进行系统调用
 
     // 调用获取进程 ID 的函数
-    bl 取进程ID
+    bl _get_pid
 
     // 保存 PID
     mov x19, x0                    // 将 PID 保存到 x19 中
@@ -44,7 +44,7 @@ _main:
     svc #0x80                      // 进行系统调用
 
 // 获取 PID 的函数
-取进程ID:
+_get_pid:
     mov x16, #20                   // 系统调用号：getpid
     svc #0x80                      // 进行系统调用
     ret                            // 返回，PID 保存在 x0 中
