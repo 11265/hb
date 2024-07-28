@@ -14,15 +14,16 @@ _main:
     // 调用 get_pvz_pid 函数
     bl      _get_pvz_pid
 
-    // 将返回值从 x0 移动到 w1 (32-bit)
-    mov     w1, w0
+    // 加载全局变量 global_pid 的地址
+    adrp    x0, _global_pid@PAGE
+    ldr     w1, [x0, _global_pid@PAGEOFF]
 
-    // 打印汇编中接收到的返回值
-    adrp    x0, return_msg@PAGE
-    add     x0, x0, return_msg@PAGEOFF
+    // 打印汇编中读取的全局变量值
+    adrp    x0, global_msg@PAGE
+    add     x0, x0, global_msg@PAGEOFF
     bl      _printf
 
-    // 检查返回值是否为 -1
+    // 检查全局变量值是否为 -1
     cmp     w1, #-1
     b.eq    not_found
 
@@ -51,7 +52,7 @@ end:
 
 .data
 start_msg:      .asciz "程序开始执行，正在查找PVZ进程...\n"
-return_msg:     .asciz "汇编中接收到的返回值: %d\n"
+global_msg:     .asciz "汇编中读取的全局变量值: %d\n"
 found_msg:      .asciz "找到PVZ进程，PID: %d\n"
 not_found_msg:  .asciz "未找到PVZ进程\n"
 end_msg:        .asciz "程序执行结束\n"
