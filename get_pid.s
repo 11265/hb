@@ -41,8 +41,11 @@ _get_pid_by_name:
     cmp w0, #0
     ble _proc_listpids_done
 
-    // 计算 PID 数量
-    lsr w0, w0, #2
+    // 计算 PID 数量 (字节数 / sizeof(int))
+    ldr w1, [sp, #32]  // 缓冲区大小
+    cmp w0, w1
+    csel w0, w0, w1, lo  // 如果返回值小于缓冲区大小，使用返回值；否则使用缓冲区大小
+    lsr w0, w0, #2  // 除以 4 (sizeof(int))
     str w0, [sp, #20]  // 保存 PID 数量
 
     // 打印调试信息
@@ -111,6 +114,11 @@ _find_pid_in_list:
     mov w3, #0  // 索引
 
 _find_loop:
+    // 检查索引是否超出范围
+    ldr w0, [sp, #36]  // 加载 PID 数量
+    cmp w3, w0
+    bhs _find_exit_not_found
+
     // 打印当前索引和总 PID 数
     adrp x0, debug_loop_info@PAGE
     add x0, x0, debug_loop_info@PAGEOFF
@@ -163,12 +171,7 @@ _continue_loop:
     add sp, sp, #1024
 
     add w3, w3, #1
-    ldr w0, [sp, #36]  // 加载 PID 数量
-    cmp w3, w0
-    blo _find_loop
-
-    mov w0, #0  // 未找到进程
-    b _find_exit
+    b _find_loop
 
 _found_pid:
     add sp, sp, #1024
@@ -180,6 +183,10 @@ _found_pid:
     mov w2, w0
     mov x0, x1
     bl _printf
+    b _find_exit
+
+_find_exit_not_found:
+    mov w0, #0  // 未找到进程
 
 _find_exit:
     // 打印结束查找的调试信息
@@ -211,7 +218,7 @@ debug_checking_pid:
 debug_proc_name:
     .asciz "Debug: Process name: %s\n"
 debug_loop_info:
-    .asciz "Debug: Checking PID %d (index %d/%d)\n"
+    .asciz "Debug: Checking PID index %d/%d\n"
 debug_proc_name_failed:
     .asciz "Debug: proc_name failed for PID %d\n"
 debug_find_start:
