@@ -14,6 +14,12 @@ _main:
     // 调用 get_pvz_pid 函数
     bl      _get_pvz_pid
 
+    // 立即打印返回值
+    mov     w1, w0
+    adrp    x0, return_msg@PAGE
+    add     x0, x0, return_msg@PAGEOFF
+    bl      _printf
+
     // 检查返回值是否为 -1
     cmp     w0, #-1
     b.eq    not_found
@@ -44,6 +50,7 @@ end:
 
 .data
 start_msg:      .asciz "程序开始执行，正在查找PVZ进程...\n"
+return_msg:     .asciz "汇编中接收到的返回值: %d\n"
 found_msg:      .asciz "找到PVZ进程，PID: %d\n"
 not_found_msg:  .asciz "未找到PVZ进程\n"
 end_msg:        .asciz "程序执行结束\n"
