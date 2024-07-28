@@ -1,8 +1,5 @@
 .section __DATA,__data
 .align 3
-KERN_SUCCESS:
-    .long 0
-    .long 0
 mib:
     .long 1, 14, 0, 0
 miblen:
@@ -23,6 +20,7 @@ process_name:
 .extern _free
 .extern _strcmp
 .extern _printf
+.extern _errno
 
 _main:
     stp x29, x30, [sp, #-16]!
@@ -40,8 +38,7 @@ _main:
     mov x19, x0  // x19 = buffer
 
     // 检查内存分配
-    cmp x19, #0
-    beq .malloc_failed
+    cbz x19, .malloc_failed
 
     // 打印内存分配成功
     adrp x0, malloc_success@PAGE
@@ -83,25 +80,29 @@ _main:
     add x22, x22, process_name@PAGEOFF  // x22 = target process name
 
 .loop:
+    // 检查是否还有足够的缓冲区
+    cmp x21, #0
+    ble .buffer_exhausted
+
     // 打印当前处理的进程信息
     adrp x0, process_info@PAGE
     add x0, x0, process_info@PAGEOFF
     ldr w1, [x20, #24]  // PID
-    ldr x2, [x20, #52]  // 进程名
+    add x2, x20, #52    // 进程名
     bl _printf
 
-    ldr x0, [x20, #52]  // 进程名通常在 kp_proc.p_comm
+    add x0, x20, #52    // 进程名通常在 kp_proc.p_comm
     mov x1, x22
     bl _strcmp
     cbz w0, .found_process
 
     ldr w23, [x20, #16]  // 获取 kp_proc.p_len
+    cmp w23, #0
+    ble .invalid_length
+
     add x20, x20, x23  // 移动到下一个进程
     sub x21, x21, x23
-    cmp x21, #0
-    bgt .loop
-
-    b .not_found
+    b .loop
 
 .found_process:
     // 进程找到，PID 在 kp_proc.p_pid
@@ -110,6 +111,20 @@ _main:
     adrp x1, pid_format@PAGE
     add x1, x1, pid_format@PAGEOFF
     bl _printf
+    b .cleanup
+
+.buffer_exhausted:
+    adrp x0, buffer_exhausted_msg@PAGE
+    add x0, x0, buffer_exhausted_msg@PAGEOFF
+    bl _printf
+    mov w0, #-1
+    b .cleanup
+
+.invalid_length:
+    adrp x0, invalid_length_msg@PAGE
+    add x0, x0, invalid_length_msg@PAGEOFF
+    bl _printf
+    mov w0, #-1
     b .cleanup
 
 .not_found:
@@ -127,11 +142,13 @@ _main:
     b .exit
 
 .sysctl_failed:
+    bl _errno
+    mov w1, w0
     adrp x0, sysctl_failed_msg@PAGE
     add x0, x0, sysctl_failed_msg@PAGEOFF
-    mov w1, w0
     bl _printf
     mov w0, #-1
+    b .cleanup
 
 .cleanup:
     // 释放内存
@@ -159,4 +176,8 @@ not_found_msg:
 malloc_failed_msg:
     .asciz "Memory allocation failed\n"
 sysctl_failed_msg:
-    .asciz "sysctl call failed with error: %d\n"
+    .asciz "sysctl call failed with errno: %d\n"
+buffer_exhausted_msg:
+    .asciz "Buffer exhausted before finding process\n"
+invalid_length_msg:
+    .asciz "Invalid process length encountered\n"
