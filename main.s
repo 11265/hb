@@ -1,50 +1,64 @@
-.section __TEXT,__text
-.globl _main
-.p2align 2
+.section __TEXT,__text,regular,pure_instructions
+.global _main
+
+// Importing external C functions
+.extern _sysctl
+.extern _malloc
+.extern _free
+.extern _strcmp
+
+// Constants
+#define KERN_PROC 14
+#define KERN_PROC_ALL 0
+#define KERN_SUCCESS 0
 
 _main:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
+    // Step 1: Allocate memory for the process list
+    mov x0, #4096               // Size of buffer
+    bl _malloc                 // Call malloc
+    mov x19, x0                // Save the pointer to buffer
 
-    adrp x0, msg@PAGE
-    add x0, x0, msg@PAGEOFF
-    bl _printf
+    // Step 2: Set up the sysctl call to get the process list
+    sub sp, sp, #16
+    mov x0, sp
+    str w19, [sp]
+    mov x1, sp
+    mov x2, #2
+    ldr x3, =KERN_PROC
+    str w3, [sp, #8]
+    ldr x3, =KERN_PROC_ALL
+    str w3, [sp, #12]
+    bl _sysctl
 
-    bl _getpid
-    mov x19, x0
+    // Check if sysctl succeeded
+    cmp w0, #KERN_SUCCESS
+    b.ne _cleanup
 
-    adrp x0, pid_msg@PAGE
-    add x0, x0, pid_msg@PAGEOFF
-    mov x1, x19
-    bl _printf
+    // Step 3: Loop through the process list and find the PID by name
+    mov x20, x19                // Pointer to the process list
+    ldr x0, =process_name       // Pointer to the target process name
 
-    adrp x0, before_call@PAGE
-    add x0, x0, before_call@PAGEOFF
-    bl _printf
+process_loop:
+    ldr x1, [x20]               // Load the process name from the buffer
+    bl _strcmp                  // Compare process names
+    cbz w0, found_pid           // If matched, jump to found_pid
 
-    adrp x0, target_process@PAGE
-    add x0, x0, target_process@PAGEOFF
-    bl _get_pid_by_name
+    // Move to the next process (assuming structure size is known, e.g., 64 bytes)
+    add x20, x20, #64
+    cbz x20, process_loop       // Repeat if not end of list
 
-    mov x20, x0
-
-    adrp x0, result_msg@PAGE
-    add x0, x0, result_msg@PAGEOFF
-    mov x1, x20
-    bl _printf
-
-    mov x0, #0
-    ldp x29, x30, [sp], #16
+cleanup:
+    // Clean up and exit
+    mov x0, x19
+    bl _free
+    mov w0, #0
     ret
 
+found_pid:
+    // x1 contains the PID of the found process
+    // Perform desired actions with the PID (e.g., store, print, etc.)
+    b cleanup
+
 .section __DATA,__data
-msg:
-    .asciz "iOS Assembly!\n"
-pid_msg:
-    .asciz "Current PID: %d\n"
-before_call:
-    .asciz "Before calling get_pid_by_name\n"
-result_msg:
-    .asciz "Found PID: %d\n"
-target_process:
-    .asciz "pvz"  // 替换为您想要查找的进程名
+process_name:
+    .asciz "target_process_name"
