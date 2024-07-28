@@ -30,6 +30,7 @@ _get_pid_by_name:
     adrp x0, debug_malloc@PAGE
     add x0, x0, debug_malloc@PAGEOFF
     mov x1, x20
+    mov x2, x23
     bl _printf
 
     mov x25, #0  // 偏移量
@@ -46,7 +47,7 @@ _proc_listpids_loop:
 
     // 调用 proc_listpids
     mov x0, #1  // PROC_ALL_PIDS
-    mov x1, x25 // 起始偏移量
+    mov x1, #0  // 起始偏移量总是 0
     mov x2, x20 // 缓冲区起始地址
     mov x3, x23 // 缓冲区大小
     bl _proc_listpids
@@ -54,6 +55,8 @@ _proc_listpids_loop:
     // 检查返回值
     cmp x0, #0
     ble _proc_listpids_done
+    cmp x0, x23
+    bgt _buffer_overflow
 
     mov x26, x0  // 保存这次返回的字节数
     
@@ -88,9 +91,17 @@ _pid_loop:
     cmp x22, x26
     blt _pid_loop
 
-    // 更新偏移量并继续循环
-    add x25, x25, x21
-    b _proc_listpids_loop
+    // 如果处理完所有 PID 还没找到，退出循环
+    b _proc_listpids_done
+
+_buffer_overflow:
+    // 打印调试信息
+    adrp x0, debug_buffer_overflow@PAGE
+    add x0, x0, debug_buffer_overflow@PAGEOFF
+    mov x1, x0
+    bl _printf
+    mov x0, #-2  // 错误代码
+    b _cleanup
 
 _proc_listpids_done:
     mov x0, #0  // 未找到进程
@@ -135,7 +146,7 @@ _exit:
 debug_start:
     .asciz "Debug: Starting get_pid_by_name\n"
 debug_malloc:
-    .asciz "Debug: Malloc returned %p\n"
+    .asciz "Debug: Malloc returned %p (size: %d)\n"
 debug_before_listpids:
     .asciz "Debug: Before proc_listpids: offset=%d, last_batch=%d, buffer_size=%d\n"
 debug_listpids:
@@ -146,3 +157,5 @@ debug_end:
     .asciz "Debug: Ending get_pid_by_name\n"
 debug_alloc_failed:
     .asciz "Debug: Memory allocation failed\n"
+debug_buffer_overflow:
+    .asciz "Debug: Buffer overflow detected\n"
