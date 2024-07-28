@@ -1,4 +1,4 @@
-name: Build Assembly and C Code for iOS
+name: iOS Build
 
 on:
   push:
@@ -8,67 +8,20 @@ on:
     branches:
       - main
 
-env:
-  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
-  ACTIONS_RUNNER_DEBUG: true
-
 jobs:
   build:
     runs-on: macos-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Xcode environment
-        run: |
-          sudo xcode-select --switch /Applications/Xcode.app
-          echo "SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)" >> $GITHUB_ENV
-          echo "$(xcrun -f clang)" >> $GITHUB_PATH
-          echo "$(xcrun -f as)" >> $GITHUB_PATH
-
-      - name: Display environment info
-        run: |
-          xcodebuild -version
-          xcrun --sdk iphoneos --show-sdk-path
-          echo $PATH
-
-      - name: List source files
-        run: |
-          ls -la
-          cat main.s
-          cat get_pid.c
-
-      - name: Compile C code
-        run: |
-          set -x
-          xcrun -sdk iphoneos clang -c -arch arm64 -o get_pid.o get_pid.c -isysroot $(xcrun --sdk iphoneos --show-sdk-path)
-
-      - name: Build assembly code
-        run: |
-          set -x
-          xcrun -sdk iphoneos as -arch arm64 -o main.o main.s
-
-      - name: Link object files
-        run: |
-          set -x
-          xcrun -sdk iphoneos clang -arch arm64 -o main main.o get_pid.o -isysroot $(xcrun --sdk iphoneos --show-sdk-path)
-
-      - name: List output files
-        run: ls -la
-
-      - name: Display file information
-        run: |
-          file main
-          otool -hv main
-          echo "Object file content:"
-          hexdump -C main.o | head -n 20
-          hexdump -C get_pid.o | head -n 20
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v3
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
         with:
-          name: ARM64_PVZ_Finder
-          path: |
-            main
-          retention-days: 30
+          ruby-version: '2.7' # Specify the Ruby version
+
+      - name: Install Fastlane
+        run: gem install fastlane
+
+      - name: Build and test
+        run: fastlane beta
