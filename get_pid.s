@@ -41,6 +41,12 @@ _get_pid_by_name:
     cmp w0, #0
     ble _proc_listpids_done
 
+    // 打印原始返回值
+    adrp x0, debug_listpids_raw@PAGE
+    add x0, x0, debug_listpids_raw@PAGEOFF
+    ldr w1, [sp, #20]
+    bl _printf
+
     // 计算 PID 数量 (字节数 / sizeof(int))
     ldr w1, [sp, #32]  // 缓冲区大小
     cmp w0, w1
@@ -205,8 +211,10 @@ debug_start:
     .asciz "Debug: Starting get_pid_by_name\n"
 debug_malloc:
     .asciz "Debug: Malloc returned %p (size: %d)\n"
+debug_listpids_raw:
+    .asciz "Debug: proc_listpids raw return value: %d\n"
 debug_listpids:
-    .asciz "Debug: proc_listpids returned %d PIDs\n"
+    .asciz "Debug: Calculated number of PIDs: %d\n"
 debug_found:
     .asciz "Debug: Found PID %d\n"
 debug_end:
