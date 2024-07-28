@@ -36,16 +36,16 @@ jobs:
       - name: Build assembly code
         run: |
           set -x
-
-          xcrun -sdk iphoneos as -v -arch arm64 -o main.o main.s
+          ls -la
+          xcrun -sdk iphoneos as -arch arm64 -o main.o main.s
 
       - name: List output files
         run: ls -la
 
       - name: Display file information
         run: |
-          file main
-          otool -hv main
+          file main.o
+          otool -hv main.o
           echo "Object file content:"
           hexdump -C main.o | head -n 20
 
@@ -54,6 +54,5 @@ jobs:
         with:
           name: ARM64
           path: |
-            *.o
-            main
+            main.o
           retention-days: 30
