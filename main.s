@@ -6,8 +6,6 @@ buffer:
     .space 1024*1024  // 1MB用于进程信息的缓冲区
 buffer_size:
     .quad 1024*1024
-process_name:
-    .asciz "pvz"  // 要查找的进程名称
 
 .section __TEXT,__text
 .globl _main
@@ -50,8 +48,8 @@ _main:
     mov x1, x21
     bl _printf
 
-    // 计算结构体数量
-    mov x22, #0x230  // kinfo_proc结构体大小 (可能需要根据系统调整)
+    // 计算结构体数量 (假设每个结构体大小为 0x100)
+    mov x22, #0x100  // kinfo_proc结构体大小 (这个值可能需要调整)
     udiv x23, x21, x22  // x23 = 结构体数量
 
     // 打印结构体数量（调试用）
@@ -59,6 +57,11 @@ _main:
     add x0, x0, count_msg@PAGEOFF
     mov x1, x23
     bl _printf
+
+    // 检查结构体数量是否合理
+    mov x24, #1000  // 假设最大进程数为1000
+    cmp x23, x24
+    b.gt _error_too_many  // 如果结构体数量大于1000，跳转到错误处理
 
     // 初始化循环
     adrp x19, buffer@PAGE
@@ -72,7 +75,7 @@ _loop:
     // 打印进程名称
     adrp x0, process_name_msg@PAGE
     add x0, x0, process_name_msg@PAGEOFF
-    add x1, x19, #0x170  // 修改这个偏移量，0x170是一个猜测值
+    add x1, x19, #0x18  // 尝试一个新的偏移量，0x18是一个猜测值
     bl _printf
 
     add x19, x19, x22  // 移动到下一个结构体
@@ -87,6 +90,14 @@ _error:
     adrp x0, error_msg@PAGE
     add x0, x0, error_msg@PAGEOFF
     mov x1, x19
+    bl _printf
+    b _exit
+
+_error_too_many:
+    // 打印错误消息：结构体数量过多
+    adrp x0, error_too_many_msg@PAGE
+    add x0, x0, error_too_many_msg@PAGEOFF
+    mov x1, x23
     bl _printf
 
 _exit:
@@ -105,3 +116,5 @@ size_msg:
     .asciz "返回的数据大小: %d\n"
 count_msg:
     .asciz "结构体数量: %d\n"
+error_too_many_msg:
+    .asciz "错误：结构体数量 (%d) 过多\n"
