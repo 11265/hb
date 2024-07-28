@@ -14,6 +14,20 @@ _main:
     // 调用获取进程 ID 的函数
     bl _get_pid
 
+
+    // 加载进程名称地址
+    adrp x0, process_name@PAGE
+    add x0, x0, process_name@PAGEOFF
+    
+    // 调用 _get_pid_by_name
+    bl _get_pid_by_name
+
+    // 检查返回值
+    cmp x0, #-1
+    beq _not_found
+
+    // 保存 PID 并继续处理...
+
     // 保存 PID
     mov x19, x0                    // 将 PID 保存到 x19 中
 
@@ -49,3 +63,6 @@ pid_message:
     .asciz "PID: "                 // PID 前缀消息
 newline:
     .asciz "\n"                    // 换行符
+
+process_name:
+    .asciz "YourProcessName"
