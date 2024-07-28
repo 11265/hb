@@ -1,9 +1,9 @@
 .section __DATA,__data
 .align 3
 pids:
-    .space 8*100  // 假设最多100个进程，每个进程ID占8字节
+    .space 8*1000  // 假设最多1000个进程，每个进程ID占8字节
 max_pids:
-    .quad 100
+    .quad 1000
 
 .section __TEXT,__text
 .globl _main
@@ -21,13 +21,13 @@ _main:
     // 调用proc_listallpids获取所有进程ID
     adrp x0, pids@PAGE
     add x0, x0, pids@PAGEOFF
-    mov x1, #800  // 8*100
+    mov x1, #8000  // 8*1000
     bl _proc_listallpids
 
     // 检查返回值
     cmp x0, #0
     b.le _error_proc_list
-    cmp x0, #800
+    cmp x0, #8000
     b.gt _error_too_many_bytes
 
     // 保存返回的字节数
@@ -63,11 +63,15 @@ _main:
     add x0, x0, input_prompt@PAGEOFF
     bl _printf
 
-    mov x0, x20  // 缓冲区地址
-    mov x1, #256  // 缓冲区大小
-    mov x2, #0  // stdin
+    mov x0, #0  // stdin
+    mov x1, x20  // 缓冲区地址
+    mov x2, #256  // 缓冲区大小
     mov x16, #3  // read系统调用
     svc #0x80
+
+    // 检查读取是否成功
+    cmp x0, #0
+    b.le _error_read_input
 
     // 移除换行符
     mov x21, x0  // 保存读取的字节数
@@ -102,6 +106,7 @@ _loop:
 
     // 获取进程名（最后一个'/'之后的部分）
     mov x0, x25
+    mov x1, #47  // '/'的ASCII码
     bl _strrchr
     cmp x0, #0
     b.eq _continue_loop
@@ -160,6 +165,13 @@ _error_too_many:
     bl _printf
     b _exit
 
+_error_read_input:
+    // 打印错误消息：读取输入失败
+    adrp x0, error_read_input_msg@PAGE
+    add x0, x0, error_read_input_msg@PAGEOFF
+    bl _printf
+    b _exit
+
 _exit:
     // 打印结束消息
     adrp x0, end_msg@PAGE
@@ -181,6 +193,8 @@ error_too_many_bytes_msg:
     .asciz "错误：返回的字节数超过了缓冲区大小\n"
 error_too_many_msg:
     .asciz "错误：进程数量 (%d) 超过最大限制 (%d)\n"
+error_read_input_msg:
+    .asciz "错误：读取用户输入失败\n"
 count_msg:
     .asciz "进程数量: %d\n"
 input_prompt:
