@@ -30,7 +30,7 @@ jobs:
           xcrun -sdk iphoneos as -arch arm64 -o main.o main.s
           
           # 链接生成可执行文件
-          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 main.o get_pid.o print_number.o -o main
+          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 main.o  print_number.o -o main
 
       - name: List output files
         run: ls -la
