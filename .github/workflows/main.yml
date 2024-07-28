@@ -28,7 +28,6 @@ jobs:
           
           # 汇编汇编文件
           xcrun -sdk iphoneos as -arch arm64 -o main.o main.s
-          xcrun -sdk iphoneos as -arch arm64 -o get_pid.o get_pid.s
           
           # 链接生成可执行文件
           xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 main.o get_pid.o print_number.o -o main
