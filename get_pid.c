@@ -5,14 +5,6 @@
 
 #define PROCESS_NAME "pvz"
 
-struct kinfo_proc {
-    struct extern_proc kp_proc;
-    struct eproc {
-        char e_paddr[8];
-        char e_spare[4];
-    } kp_eproc;
-};
-
 int get_pvz_pid() {
     int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0};
     size_t size;
