@@ -12,6 +12,7 @@ result:
 .extern _sysctlbyname
 .extern _printf
 .extern _errno
+.extern _exit
 
 _main:
     stp x29, x30, [sp, #-16]!
@@ -45,6 +46,11 @@ _main:
     bl _printf
     add sp, sp, #32
 
+    // 打印准备调用 sysctlbyname
+    adrp x0, calling_sysctlbyname@PAGE
+    add x0, x0, calling_sysctlbyname@PAGEOFF
+    bl _printf
+
     // 调用 sysctlbyname
     adrp x0, sysctl_name@PAGE
     add x0, x0, sysctl_name@PAGEOFF
@@ -56,6 +62,11 @@ _main:
     mov x3, xzr
     mov x4, xzr
     bl _sysctlbyname
+
+    // 打印 sysctlbyname 返回
+    adrp x0, sysctlbyname_returned@PAGE
+    add x0, x0, sysctlbyname_returned@PAGEOFF
+    bl _printf
 
     // 检查返回值
     cmp w0, #0
@@ -80,6 +91,17 @@ _main:
     mov w0, #-1
 
 .exit:
+    // 打印退出信息
+    adrp x0, exit_msg@PAGE
+    add x0, x0, exit_msg@PAGEOFF
+    bl _printf
+
+    // 调用 exit 系统调用
+    mov x0, #0
+    mov x16, #1  // exit 系统调用号
+    svc #0x80
+
+    // 这里不应该被执行到
     ldp x29, x30, [sp], #16
     ret
 
@@ -94,3 +116,9 @@ sysctl_failed_msg:
     .asciz "sysctlbyname call failed with errno: %d\n"
 sysctl_params:
     .asciz "sysctlbyname params: name=%p, buffer=%p, size=%lld\n"
+calling_sysctlbyname:
+    .asciz "Calling sysctlbyname...\n"
+sysctlbyname_returned:
+    .asciz "sysctlbyname returned\n"
+exit_msg:
+    .asciz "Program exiting\n"
