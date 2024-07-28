@@ -1,11 +1,11 @@
 .section __DATA,__data
 .align 3
 mib:
-    .long 6, 3  // 使用 CTL_HW, HW_PHYSMEM
+    .long 6, 3  // CTL_HW, HW_PHYSMEM
 miblen:
     .quad 2
 buffer_size:
-    .quad 8  // 只需要 8 字节来存储内存大小
+    .quad 8  // 8 bytes for uint64_t
 result:
     .quad 0
 
@@ -14,8 +14,6 @@ result:
 .globl _main
 
 .extern _sysctl
-.extern _malloc
-.extern _free
 .extern _printf
 .extern _errno
 
@@ -28,21 +26,32 @@ _main:
     add x0, x0, start_msg@PAGEOFF
     bl _printf
 
-    // 设置 sysctl 参数
-    sub sp, sp, #48
+    // 准备 sysctl 参数
+    sub sp, sp, #64
+    stp xzr, xzr, [sp]
+    stp xzr, xzr, [sp, #16]
+    stp xzr, xzr, [sp, #32]
+    stp xzr, xzr, [sp, #48]
+
+    // 设置 mib
     adrp x0, mib@PAGE
     add x0, x0, mib@PAGEOFF
     str x0, [sp]
-    adrp x1, miblen@PAGE
-    ldr x1, [x1, miblen@PAGEOFF]
-    str x1, [sp, #8]
-    adrp x2, result@PAGE
-    add x2, x2, result@PAGEOFF
-    str x2, [sp, #16]  // result buffer
-    adrp x3, buffer_size@PAGE
-    add x3, x3, buffer_size@PAGEOFF
-    str x3, [sp, #24]  // size
-    stp xzr, xzr, [sp, #32]  // 新的参数：NULL, 0
+
+    // 设置 miblen
+    adrp x0, miblen@PAGE
+    ldr x0, [x0, miblen@PAGEOFF]
+    str x0, [sp, #8]
+
+    // 设置 result 缓冲区地址
+    adrp x0, result@PAGE
+    add x0, x0, result@PAGEOFF
+    str x0, [sp, #16]
+
+    // 设置 buffer_size
+    adrp x0, buffer_size@PAGE
+    ldr x0, [x0, buffer_size@PAGEOFF]
+    str x0, [sp, #24]
 
     // 打印 sysctl 参数
     adrp x0, sysctl_params@PAGE
@@ -80,7 +89,7 @@ _main:
     mov w0, #-1
 
 .exit:
-    add sp, sp, #48
+    add sp, sp, #64
     ldp x29, x30, [sp], #16
     ret
 
