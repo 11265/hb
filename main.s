@@ -1,16 +1,21 @@
 .section __DATA,__data
+.align 3  // 确保 8 字节对齐
 KERN_SUCCESS:
     .long 0
+    .long 0  // 填充以保持对齐
 mib:
     .long 1, 14, 0, 0  // CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0
 miblen:
     .long 4
-process_name:
-    .asciz "pvz"  // 替换为目标进程名
+    .long 0  // 填充以保持对齐
 buffer_size:
     .quad 4096  // 初始缓冲区大小
+process_name:
+    .asciz "pvz"  // 替换为目标进程名
+    .align 3  // 确保下一个数据也是 8 字节对齐
 
 .section __TEXT,__text
+.align 2
 .globl _main
 
 .extern _sysctl
