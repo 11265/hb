@@ -101,42 +101,44 @@ _find_pid_by_name:
     // x2: 目标进程名称
     stp x29, x30, [sp, #-16]!
     mov x29, sp
-    sub sp, sp, #48
-    str x0, [sp, #40]
-    str w1, [sp, #36]
-    str x2, [sp, #24]
+    sub sp, sp, #64
+    str x0, [sp, #56]
+    str w1, [sp, #52]
+    str x2, [sp, #40]
 
     // 打印开始查找的调试信息
     adrp x0, debug_find_start@PAGE
     add x0, x0, debug_find_start@PAGEOFF
-    ldr w1, [sp, #36]
+    ldr w1, [sp, #52]
     bl _printf
 
     mov w3, #0  // 索引
+    str w3, [sp, #36]  // 保存索引到栈上
 
 _find_loop:
     // 检查索引是否超出范围
-    ldr w0, [sp, #36]  // 加载 PID 数量
+    ldr w0, [sp, #52]  // 加载 PID 数量
+    ldr w3, [sp, #36]  // 加载索引
     cmp w3, w0
     bhs _find_exit_not_found
 
-    ldr x0, [sp, #40]
+    ldr x0, [sp, #56]
     ldr w4, [x0, x3, lsl #2]  // 加载 PID
-    str w4, [sp, #32]  // 保存当前 PID
+    str w4, [sp, #48]  // 保存当前 PID
 
     // 打印正在检查的 PID 和索引
     adrp x0, debug_checking_pid@PAGE
     add x0, x0, debug_checking_pid@PAGEOFF
-    mov w1, w3
-    ldr w2, [sp, #36]
-    ldr w3, [sp, #32]
+    ldr w1, [sp, #36]  // 索引
+    ldr w2, [sp, #52]  // PID 总数
+    ldr w3, [sp, #48]  // 当前 PID
     bl _printf
 
-    // 检查 PID 是否有效 (大于 0 且小于 99999)
-    ldr w4, [sp, #32]
+    // 检查 PID 是否有效 (大于 0 且小于等于 99999)
+    ldr w4, [sp, #48]
     cmp w4, #0
     ble _continue_loop
-    mov w5, #99999
+    mov w5, #0x1869F  // 99999 的十六进制表示
     cmp w4, w5
     bgt _continue_loop
 
@@ -144,7 +146,7 @@ _find_loop:
     sub sp, sp, #1024
     mov x0, sp
     mov w1, #1024
-    ldr w2, [sp, #1056]  // 加载当前 PID
+    ldr w2, [sp, #1072]  // 加载当前 PID
     bl _proc_name
 
     cmp w0, #0
@@ -157,7 +159,7 @@ _find_loop:
     bl _printf
 
     // 比较进程名称
-    ldr x0, [sp, #1048]  // 加载目标进程名称
+    ldr x0, [sp, #1064]  // 加载目标进程名称
     mov x1, sp
     bl _strcmp
 
@@ -165,13 +167,14 @@ _find_loop:
 
 _continue_loop:
     add sp, sp, #1024
-    ldr w3, [sp, #-1036]  // 恢复索引
+    ldr w3, [sp, #36]  // 加载索引
     add w3, w3, #1
+    str w3, [sp, #36]  // 保存更新后的索引
     b _find_loop
 
 _found_pid:
     add sp, sp, #1024
-    ldr w0, [sp, #32]  // 返回找到的 PID
+    ldr w0, [sp, #48]  // 返回找到的 PID
 
     // 打印调试信息
     adrp x1, debug_found@PAGE
@@ -192,7 +195,7 @@ _find_exit:
     mov x0, x1
     bl _printf
 
-    add sp, sp, #48
+    add sp, sp, #64
     ldp x29, x30, [sp], #16
     ret
 
