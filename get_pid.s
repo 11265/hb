@@ -138,7 +138,8 @@ _find_loop:
     ldr w4, [sp, #48]
     cmp w4, #0
     ble _continue_loop
-    mov w5, #0x1869F  // 99999 的十六进制表示
+    movz w5, #0x869f   // 加载 99999 的低 16 位
+    movk w5, #0x1, lsl #16  // 加载 99999 的高 16 位
     cmp w4, w5
     bgt _continue_loop
 
