@@ -1,57 +1,54 @@
 .section __TEXT,__text
 .globl _main
-.p2align 2
+.align 2
 
 _main:
-    stp x19, x20, [sp, #-16]!
+    // Save frame pointer and link register
     stp x29, x30, [sp, #-16]!
     mov x29, sp
 
+    // Print initial message
     adrp x0, message@PAGE
     add x0, x0, message@PAGEOFF
     bl _printf
 
+    // Get and print current PID
     bl _getpid
-    mov x19, x0
-
+    mov x1, x0
     adrp x0, current_pid_format@PAGE
     add x0, x0, current_pid_format@PAGEOFF
-    mov x1, x19
     bl _printf
 
-    adrp x0, log_before_get_pid@PAGE
-    add x0, x0, log_before_get_pid@PAGEOFF
+    // Print message before calling get_pid_by_name
+    adrp x0, before_call_msg@PAGE
+    add x0, x0, before_call_msg@PAGEOFF
     bl _printf
 
+    // Call get_pid_by_name
     adrp x0, process_name@PAGE
     add x0, x0, process_name@PAGEOFF
     bl _get_pid_by_name
 
+    // Check return value
+    cmp x0, #-1
+    beq .Lnot_found
+
+    // Print found PID
     mov x1, x0
-    adrp x0, log_after_get_pid@PAGE
-    add x0, x0, log_after_get_pid@PAGEOFF
+    adrp x0, found_format@PAGE
+    add x0, x0, found_format@PAGEOFF
+    bl _printf
+    b .Lexit
+
+.Lnot_found:
+    // Print not found message
+    adrp x0, not_found_msg@PAGE
+    add x0, x0, not_found_msg@PAGEOFF
     bl _printf
 
-    cmp x0, #0
-    ble _not_found
-
-    mov x19, x0
-
-    adrp x0, found_pid_format@PAGE
-    add x0, x0, found_pid_format@PAGEOFF
-    mov x1, x19
-    bl _printf
-
-    b _exit_program
-
-_not_found:
-    adrp x0, not_found_message@PAGE
-    add x0, x0, not_found_message@PAGEOFF
-    bl _printf
-
-_exit_program:
+.Lexit:
+    // Restore frame pointer and link register
     ldp x29, x30, [sp], #16
-    ldp x19, x20, [sp], #16
     mov w0, #0
     ret
 
@@ -60,13 +57,11 @@ message:
     .asciz "iOS Assembly!\n"
 current_pid_format:
     .asciz "Current PID: %d\n"
-log_before_get_pid:
+before_call_msg:
     .asciz "Before calling get_pid_by_name\n"
-log_after_get_pid:
-    .asciz "After calling get_pid_by_name, result: %d\n"
-found_pid_format:
-    .asciz "Found process PID: %d\n"
-not_found_message:
-    .asciz "Process not found or error occurred\n"
 process_name:
-    .asciz "main"  // Change this to the name of your program
+    .asciz "SpringBoard"
+found_format:
+    .asciz "Found PID: %d\n"
+not_found_msg:
+    .asciz "Process not found\n"
