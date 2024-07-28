@@ -8,6 +8,10 @@ on:
     branches:
       - main
 
+env:
+  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+  ACTIONS_RUNNER_DEBUG: true
+
 jobs:
   build:
     runs-on: macos-latest
@@ -20,17 +24,22 @@ jobs:
         run: |
           sudo xcode-select --switch /Applications/Xcode.app
           echo "SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)" >> $GITHUB_ENV
+          echo "$(xcrun -f clang)" >> $GITHUB_PATH
+          echo "$(xcrun -f as)" >> $GITHUB_PATH
+
+      - name: Display environment info
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-path
+          echo $PATH
 
       - name: Build assembly code
         run: |
-          # 编译 C 文件
-          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 -c print_number.c -o print_number.o
-          
-          # 汇编汇编文件
-          xcrun -sdk iphoneos as -arch arm64 -o main.o main.s
-          
-          # 链接生成可执行文件
-          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=13.0 main.o  print_number.o -o main
+          set -x
+          xcrun -sdk iphoneos clang -v -arch arm64 -mios-version-min=13.0 -c print_number.c -o print_number.o
+          xcrun -sdk iphoneos as -v -arch arm64 -o main.o main.s
+          xcrun -sdk iphoneos as -v -arch arm64 -o get_pid.o get_pid.s
+          xcrun -sdk iphoneos clang -v -arch arm64 -mios-version-min=13.0 main.o get_pid.o print_number.o -o main
 
       - name: List output files
         run: ls -la
@@ -49,5 +58,6 @@ jobs:
         with:
           name: ARM64
           path: |
+            *.o
             main
           retention-days: 30
