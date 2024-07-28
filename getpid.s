@@ -54,10 +54,11 @@ _print_number:
     add x2, sp, #16                // 指向临时缓冲区
     mov x3, #0                     // 累计字符数
     mov x4, #48                    // 数字 '0' 的 ASCII 值
+    mov x7, #10                    // 数字 10
 
 _print_digit:
-    udiv x5, x1, #10               // 计算 x1 / 10
-    msub x6, x1, x5, #10           // 计算余数 x1 % 10
+    udiv x5, x1, x7                // 计算 x1 / 10
+    msub x6, x1, x5, x7            // 计算余数 x1 % 10
     add x6, x6, x4                 // 转换为字符
     strb w6, [x2, x3]              // 存储字符
     mov x1, x5                     // 更新 x1 为商
