@@ -7,7 +7,6 @@
 #include <unistd.h>
 #include <libproc.h>
 
-int get_pid_by_name(const char* name);
-void print_number(int number);
+extern int get_pid_by_name(const char* name);
 
 #endif // API_H
