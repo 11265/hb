@@ -49,6 +49,12 @@ _main:
     // 保存所需大小
     mov x21, x0
 
+    // 打印获取到的字节数
+    mov x1, x21
+    adrp x0, bytes_msg@PAGE
+    add x0, x0, bytes_msg@PAGEOFF
+    bl _printf
+
     // 分配内存
     mov x0, x21
     bl _malloc
@@ -148,6 +154,8 @@ start_msg:
     .asciz "程序开始执行"
 input_prompt:
     .asciz "请输入要查找的进程名称: "
+bytes_msg:
+    .asciz "获取到的字节数: %d\n"
 proc_count_msg:
     .asciz "总进程数: %d\n"
 found_proc_msg:
