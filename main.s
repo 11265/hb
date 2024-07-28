@@ -66,4 +66,4 @@ found_pid_format:
 not_found_message:
     .asciz "Process not found or error occurred\n"
 process_name:
-    .asciz "SpringBoard"
+    .asciz "pvz"
