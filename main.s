@@ -39,10 +39,43 @@ _main:
     add x0, x0, success_msg@PAGEOFF
     bl _printf
 
-    // TODO: 处理缓冲区以查找指定进程的PID
-    // 这部分将涉及解析缓冲区中的kinfo_proc结构
-    // 并比较进程名称直到找到匹配项
+    // 处理缓冲区以查找指定进程的PID
+    adrp x19, buffer@PAGE
+    add x19, x19, buffer@PAGEOFF  // x19 = buffer起始地址
+    adrp x20, buffer_size@PAGE
+    add x20, x20, buffer_size@PAGEOFF
+    ldr x20, [x20]  // x20 = buffer实际大小
+    add x20, x19, x20  // x20 = buffer结束地址
 
+_loop:
+    cmp x19, x20
+    b.ge _not_found
+
+    // 比较进程名
+    add x0, x19, #0x1ac  // p_comm在kinfo_proc中的偏移
+    adrp x1, process_name@PAGE
+    add x1, x1, process_name@PAGEOFF
+    bl _strcmp
+
+    cmp x0, #0
+    b.eq _found
+
+    add x19, x19, #0x230  // kinfo_proc结构体大小
+    b _loop
+
+_found:
+    // 打印找到的PID
+    adrp x0, found_msg@PAGE
+    add x0, x0, found_msg@PAGEOFF
+    ldr w1, [x19, #0x68]  // p_pid在kinfo_proc中的偏移
+    bl _printf
+    b _exit
+
+_not_found:
+    // 打印未找到进程的消息
+    adrp x0, not_found_msg@PAGE
+    add x0, x0, not_found_msg@PAGEOFF
+    bl _printf
     b _exit
 
 _error:
@@ -65,3 +98,7 @@ error_msg:
     .asciz "sysctl调用失败，errno: %d\n"
 success_msg:
     .asciz "sysctl调用成功\n"
+found_msg:
+    .asciz "找到进程，PID: %d\n"
+not_found_msg:
+    .asciz "未找到指定的进程\n"
