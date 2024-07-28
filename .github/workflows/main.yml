@@ -37,12 +37,12 @@ jobs:
         run: |
           ls -la
           cat main.s
-          cat get_pvz_pid.c
+          cat get_pid.c
 
       - name: Compile C code
         run: |
           set -x
-          xcrun -sdk iphoneos clang -c -arch arm64 -o get_pvz_pid.o get_pvz_pid.c
+          xcrun -sdk iphoneos clang -c -arch arm64 -o get_pid.o get_pid.c
 
       - name: Build assembly code
         run: |
@@ -52,7 +52,7 @@ jobs:
       - name: Link object files
         run: |
           set -x
-          xcrun -sdk iphoneos clang -arch arm64 -o find_pvz main.o get_pvz_pid.o
+          xcrun -sdk iphoneos clang -arch arm64 -o find_pvz main.o get_pid.o
 
       - name: List output files
         run: ls -la
@@ -63,7 +63,7 @@ jobs:
           otool -hv find_pvz
           echo "Object file content:"
           hexdump -C main.o | head -n 20
-          hexdump -C get_pvz_pid.o | head -n 20
+          hexdump -C get_pid.o | head -n 20
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
