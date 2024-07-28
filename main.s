@@ -16,30 +16,22 @@ _main:
 
     // 加载全局变量 global_pid 的地址
     adrp    x0, _global_pid@PAGE
-    ldr     w1, [x0, _global_pid@PAGEOFF]
+    add     x0, x0, _global_pid@PAGEOFF
+
+    // 打印全局变量的地址
+    mov     x1, x0
+    adrp    x0, addr_msg@PAGE
+    add     x0, x0, addr_msg@PAGEOFF
+    bl      _printf
+
+    // 读取全局变量的值
+    ldr     w1, [x0]
 
     // 打印汇编中读取的全局变量值
     adrp    x0, global_msg@PAGE
     add     x0, x0, global_msg@PAGEOFF
     bl      _printf
 
-    // 检查全局变量值是否为 -1
-    cmp     w1, #-1
-    b.eq    not_found
-
-    // 打印找到进程的信息
-    adrp    x0, found_msg@PAGE
-    add     x0, x0, found_msg@PAGEOFF
-    bl      _printf
-    b       end
-
-not_found:
-    // 打印未找到进程的信息
-    adrp    x0, not_found_msg@PAGE
-    add     x0, x0, not_found_msg@PAGEOFF
-    bl      _printf
-
-end:
     // 打印结束信息
     adrp    x0, end_msg@PAGE
     add     x0, x0, end_msg@PAGEOFF
@@ -51,8 +43,7 @@ end:
     ret
 
 .data
-start_msg:      .asciz "程序开始执行，正在查找PVZ进程...\n"
+start_msg:      .asciz "程序开始执行...\n"
+addr_msg:       .asciz "汇编中 global_pid 的地址: %p\n"
 global_msg:     .asciz "汇编中读取的全局变量值: %d\n"
-found_msg:      .asciz "找到PVZ进程，PID: %d\n"
-not_found_msg:  .asciz "未找到PVZ进程\n"
 end_msg:        .asciz "程序执行结束\n"
