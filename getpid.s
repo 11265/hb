@@ -8,7 +8,8 @@ _main:
     movz x16, 0x2000, lsl #16
     movk x16, 0x0004
     svc 0                          // Make the syscall
-    mov x16, 0x2000001             // syscall number for exit
+    movz x16, #0x1
+    movk x16, #0x200, lsl #16
     mov x0, 0                      // Exit code
     svc 0                          // Make the syscall
 
