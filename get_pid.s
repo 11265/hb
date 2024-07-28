@@ -16,7 +16,7 @@ _get_pid_by_name:
     bl _printf
 
     // 分配内存用于存储 PID 列表
-    mov x0, #4096  // 4KB 应该足够存储大多数情况下的 PID 列表
+    mov x0, #16384  // 增加到 16KB
     bl _malloc
     mov x20, x0  // 保存分配的内存指针
 
@@ -33,12 +33,16 @@ _get_pid_by_name:
     mov x0, #1  // PROC_ALL_PIDS
     mov x1, #0
     mov x2, x20  // buffer
-    mov x3, #4096
+    mov x3, #16384  // 使用增加后的缓冲区大小
     bl _proc_listpids
 
     // 检查返回值
     cmp x0, #0
     ble _cleanup
+
+    // 检查返回值是否超过缓冲区大小
+    cmp x0, #16384
+    bgt _buffer_overflow
 
     mov x21, x0  // 保存返回的字节数
     mov x22, #0  // PID 计数器
@@ -101,6 +105,15 @@ _allocation_failed:
     adrp x0, debug_alloc_failed@PAGE
     add x0, x0, debug_alloc_failed@PAGEOFF
     bl _printf
+    b _exit
+
+_buffer_overflow:
+    mov x0, #-2  // 返回错误码
+
+    // 打印调试信息
+    adrp x0, debug_buffer_overflow@PAGE
+    add x0, x0, debug_buffer_overflow@PAGEOFF
+    bl _printf
 
 _exit:
     ldp x29, x30, [sp], #16
@@ -121,3 +134,5 @@ debug_end:
     .asciz "Debug: Ending get_pid_by_name\n"
 debug_alloc_failed:
     .asciz "Debug: Memory allocation failed\n"
+debug_buffer_overflow:
+    .asciz "Debug: Buffer overflow detected\n"
