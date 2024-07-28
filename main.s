@@ -3,7 +3,25 @@
 .p2align 2
 
 _main:
-    // ... (前面的代码保持不变)
+    // 保存调用者保存的寄存器
+    stp x19, x20, [sp, #-16]!
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+
+    // 打印欢迎消息
+    adrp x0, message@PAGE
+    add x0, x0, message@PAGEOFF
+    bl _printf
+
+    // 获取当前进程 ID
+    bl _getpid
+    mov x19, x0  // 保存当前进程 ID
+
+    // 打印当前进程 ID
+    adrp x0, current_pid_format@PAGE
+    add x0, x0, current_pid_format@PAGEOFF
+    mov x1, x19
+    bl _printf
 
     // 通过名称获取指定进程 ID
     adrp x0, process_name@PAGE
@@ -12,11 +30,7 @@ _main:
 
     // 检查返回值
     cmp x0, #0
-    beq _not_found
-    cmp x0, #-1
-    beq _allocation_error
-    cmp x0, #-2
-    beq _buffer_overflow_error
+    ble _not_found
 
     // 保存找到的 PID
     mov x19, x0
@@ -34,20 +48,6 @@ _not_found:
     adrp x0, not_found_message@PAGE
     add x0, x0, not_found_message@PAGEOFF
     bl _printf
-    b _exit_program
-
-_allocation_error:
-    // 打印内存分配错误消息
-    adrp x0, allocation_error_message@PAGE
-    add x0, x0, allocation_error_message@PAGEOFF
-    bl _printf
-    b _exit_program
-
-_buffer_overflow_error:
-    // 打印缓冲区溢出错误消息
-    adrp x0, buffer_overflow_message@PAGE
-    add x0, x0, buffer_overflow_message@PAGEOFF
-    bl _printf
 
 _exit_program:
     // 恢复寄存器并返回
@@ -64,10 +64,6 @@ current_pid_format:
 found_pid_format:
     .asciz "Found process PID: %d\n"
 not_found_message:
-    .asciz "Process not found\n"
-allocation_error_message:
-    .asciz "Memory allocation error\n"
-buffer_overflow_message:
-    .asciz "Buffer overflow error\n"
+    .asciz "Process not found or error occurred\n"
 process_name:
     .asciz "SpringBoard"
