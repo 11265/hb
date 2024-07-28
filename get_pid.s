@@ -5,6 +5,7 @@
 _get_pid_by_name:
     stp x19, x20, [sp, #-16]!
     stp x21, x22, [sp, #-16]!
+    stp x23, x24, [sp, #-16]!
     stp x29, x30, [sp, #-16]!
     mov x29, sp
 
@@ -15,8 +16,29 @@ _get_pid_by_name:
     add x0, x0, debug_start@PAGEOFF
     bl _printf
 
-    // 分配内存用于存储 PID 列表
-    mov x0, #16384  // 增加到 16KB
+    // 首先调用 proc_listpids 获取所需的缓冲区大小
+    mov x0, #1  // PROC_ALL_PIDS
+    mov x1, #0
+    mov x2, #0  // NULL buffer
+    mov x3, #0  // 0 size
+    bl _proc_listpids
+
+    // 检查返回值
+    cmp x0, #0
+    ble _proc_listpids_error
+
+    // 保存所需的缓冲区大小
+    mov x23, x0
+    add x23, x23, #4096  // 添加一些额外的空间以防万一
+
+    // 打印调试信息
+    adrp x0, debug_buffer_size@PAGE
+    add x0, x0, debug_buffer_size@PAGEOFF
+    mov x1, x23
+    bl _printf
+
+    // 分配内存
+    mov x0, x23
     bl _malloc
     mov x20, x0  // 保存分配的内存指针
 
@@ -29,20 +51,16 @@ _get_pid_by_name:
     mov x1, x20
     bl _printf
 
-    // 调用 proc_listpids 获取所有 PID
+    // 再次调用 proc_listpids，这次使用分配的缓冲区
     mov x0, #1  // PROC_ALL_PIDS
     mov x1, #0
     mov x2, x20  // buffer
-    mov x3, #16384  // 使用增加后的缓冲区大小
+    mov x3, x23  // size
     bl _proc_listpids
 
     // 检查返回值
     cmp x0, #0
     ble _cleanup
-
-    // 检查返回值是否超过缓冲区大小
-    cmp x0, #16384
-    bgt _buffer_overflow
 
     mov x21, x0  // 保存返回的字节数
     mov x22, #0  // PID 计数器
@@ -107,16 +125,17 @@ _allocation_failed:
     bl _printf
     b _exit
 
-_buffer_overflow:
+_proc_listpids_error:
     mov x0, #-2  // 返回错误码
 
     // 打印调试信息
-    adrp x0, debug_buffer_overflow@PAGE
-    add x0, x0, debug_buffer_overflow@PAGEOFF
+    adrp x0, debug_proc_listpids_error@PAGE
+    add x0, x0, debug_proc_listpids_error@PAGEOFF
     bl _printf
 
 _exit:
     ldp x29, x30, [sp], #16
+    ldp x23, x24, [sp], #16
     ldp x21, x22, [sp], #16
     ldp x19, x20, [sp], #16
     ret
@@ -124,6 +143,8 @@ _exit:
 .section __DATA,__data
 debug_start:
     .asciz "Debug: Starting get_pid_by_name\n"
+debug_buffer_size:
+    .asciz "Debug: Required buffer size: %d bytes\n"
 debug_malloc:
     .asciz "Debug: Malloc returned %p\n"
 debug_listpids:
@@ -134,5 +155,5 @@ debug_end:
     .asciz "Debug: Ending get_pid_by_name\n"
 debug_alloc_failed:
     .asciz "Debug: Memory allocation failed\n"
-debug_buffer_overflow:
-    .asciz "Debug: Buffer overflow detected\n"
+debug_proc_listpids_error:
+    .asciz "Debug: Error calling proc_listpids\n"
