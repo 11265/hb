@@ -13,6 +13,11 @@ _main:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
 
+    // 打印开始消息
+    adrp x0, start_msg@PAGE
+    add x0, x0, start_msg@PAGEOFF
+    bl _printf
+
     // 调用proc_listallpids获取所有进程ID
     adrp x0, pids@PAGE
     add x0, x0, pids@PAGEOFF
@@ -25,6 +30,16 @@ _main:
 
     // 保存进程数量
     mov x19, x0
+
+    // 打印原始返回值
+    adrp x0, raw_return_msg@PAGE
+    add x0, x0, raw_return_msg@PAGEOFF
+    mov x1, x19
+    bl _printf
+
+    // 计算实际进程数量
+    mov x20, #4
+    udiv x19, x19, x20
 
     // 检查进程数量是否合理
     adrp x1, max_pids@PAGE
@@ -50,6 +65,12 @@ _loop:
 
     // 获取当前进程ID
     ldr w22, [x21, x20, lsl #2]
+
+    // 打印当前处理的进程ID
+    adrp x0, processing_pid_msg@PAGE
+    add x0, x0, processing_pid_msg@PAGEOFF
+    mov x1, x22
+    bl _printf
 
     // 为进程路径分配栈空间
     sub sp, sp, #1024
@@ -84,6 +105,7 @@ _error_proc_list:
     // 打印错误消息
     adrp x0, error_proc_list_msg@PAGE
     add x0, x0, error_proc_list_msg@PAGEOFF
+    mov x1, x0
     bl _printf
     b _exit
 
@@ -96,19 +118,31 @@ _error_too_many:
     add x2, x2, max_pids@PAGEOFF
     ldr w2, [x2]
     bl _printf
-    b _exit
 
 _exit:
+    // 打印结束消息
+    adrp x0, end_msg@PAGE
+    add x0, x0, end_msg@PAGEOFF
+    bl _printf
+
     mov x0, #0
     mov x16, #1  // exit系统调用
     svc #0x80
 
 .section __TEXT,__cstring
+start_msg:
+    .asciz "程序开始执行\n"
+raw_return_msg:
+    .asciz "proc_listallpids 原始返回值: %d\n"
 error_proc_list_msg:
     .asciz "获取进程列表失败\n"
 error_too_many_msg:
     .asciz "错误：进程数量 (%d) 超过最大限制 (%d)\n"
 count_msg:
     .asciz "进程数量: %d\n"
+processing_pid_msg:
+    .asciz "正在处理进程ID: %d\n"
 process_info_msg:
     .asciz "进程ID: %d, 路径: %s\n"
+end_msg:
+    .asciz "程序执行结束\n"
