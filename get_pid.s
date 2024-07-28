@@ -33,7 +33,7 @@ _get_pid_by_name:
     mov w0, #1  // PROC_ALL_PIDS
     mov x1, #0
     ldr x2, [sp, #24]
-    ldr x3, [sp, #32]
+    ldr w3, [sp, #32]
     bl _proc_listpids
 
     // 检查返回值
@@ -100,6 +100,7 @@ _find_pid_in_list:
     mov w3, #0  // 索引
 
 _find_loop:
+    ldr x0, [sp, #40]
     ldr w4, [x0, x3, lsl #2]  // 加载 PID
     str w4, [sp, #32]  // 保存当前 PID
 
@@ -115,6 +116,12 @@ _find_loop:
     mov w1, #1024
     ldr w2, [sp, #1056]  // 加载当前 PID
     bl _proc_name
+
+    // 打印调试信息
+    adrp x0, debug_proc_name@PAGE
+    add x0, x0, debug_proc_name@PAGEOFF
+    mov x1, sp
+    bl _printf
 
     // 比较进程名称
     ldr x0, [sp, #1048]  // 加载目标进程名称
@@ -164,3 +171,5 @@ debug_alloc_failed:
     .asciz "Debug: Memory allocation failed\n"
 debug_checking_pid:
     .asciz "Debug: Checking PID %d\n"
+debug_proc_name:
+    .asciz "Debug: Process name: %s\n"
