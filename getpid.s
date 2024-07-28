@@ -48,8 +48,6 @@ _get_pid:
 
 // 打印数字的函数
 _print_number:
-    // 将 x0 中的数字转换为字符串并输出
-    // 简化版本：假设 PID 不超过 9999 (4 位数)
     mov x1, x0                     // 备份 PID
     add x2, sp, #16                // 指向临时缓冲区
     mov x3, #0                     // 累计字符数
@@ -67,13 +65,14 @@ _print_digit:
     bne _print_digit               // 如果不是 0，继续
 
     // 反向输出字符串
-    sub x2, x2, #1                 // 指向最后一个字符
+    sub x2, x2, x3                 // 指向缓冲区起始位置
     add x0, x2, #0                 // 设置输出字符的指针
     mov x2, x3                     // 设置输出字符的长度
     mov x16, #4                    // syscall: write
     svc #0x80                      // 输出字符
 
     ret                            // 返回主程序
+
 
 .section __DATA,__data
 message:
