@@ -7,8 +7,8 @@
 #include <pthread.h>
 
 #define ALIGN4(size) (((size) + 3) & ~3)
-#define PAGE_SIZE 4096
-#define PAGE_MASK (~(PAGE_SIZE - 1))
+//#define PAGE_SIZE 4096
+//#define PAGE_MASK (~(PAGE_SIZE - 1))
 
 typedef struct {
     pthread_t thread;
