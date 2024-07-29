@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <mach/mach.h>
 
+// 添加 "读内存" 函数的声明
+int 读内存(vm_address_t address, void* buffer, size_t size);
+
 // 查找模块基地址的函数
 vm_address_t find_module_base(task_t target_task, const char* module_name);
 
