@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "内存模块.h"
+#include <sys/types.h>  // Add this line if not already present
 
 #define TARGET_PID 22496
 #define TARGET_ADDRESS 0x102DD2404
