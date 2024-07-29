@@ -23,9 +23,9 @@ int c_main(void) {
     // 读取多个地址的示例
     vm_address_t addresses[] = {0x104bb7c78, 0x104cc8000, 0x104dd9000, 0x104bb7c7c, 0x104bb7c80};
     for (int i = 0; i < sizeof(addresses) / sizeof(vm_address_t); i++) {
-        printf("尝试异步读取地址 0x%llx\n", (unsigned long long)addresses[i]);
-        int32_t value = 异步读内存i32(addresses[i]);
-        printf("地址 0x%llx 处异步读取的 int32_t 值: %d (0x%x)\n", 
+        printf("尝试读取地址 0x%llx\n", (unsigned long long)addresses[i]);
+        int32_t value = 读内存i32(addresses[i]);
+        printf("地址 0x%llx 处读取的 int32_t 值: %d (0x%x)\n", 
                (unsigned long long)addresses[i], value, value);
     }
 
