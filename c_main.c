@@ -10,7 +10,7 @@ int c_main(void) {
         fprintf(stderr, "无法初始化内存访问\n");
         return -1;
     }
-
+    
     int32_t int_value = 读内存i32(TARGET_ADDRESS);
     printf("读取的 int32_t 值: %d\n", int_value);
 
