@@ -5,7 +5,6 @@ _main:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
 
-    // 调用我们的 read_memory 函数
     bl _read_memory
 
     mov x0, #0
@@ -24,26 +23,11 @@ _read_memory:
     // 存储任务端口
     mov x19, x0
 
-    // 目标 PID (替换为实际的 PID)
-    mov x1, #22496
+    // 使用自己的任务端口
+    mov x20, x19
 
-    // 用于存储目标任务的指针
-    sub sp, sp, #16
-    mov x2, sp
-
-    // 调用 task_for_pid
-    bl _task_for_pid
-
-    // 检查结果
-    cbnz x0, _exit
-
-    // 加载目标任务
-    ldr x20, [sp]
-
-    // 要读取的地址 (0x102DD2404)
-    mov x1, #0x2404
-    movk x1, #0x02DD, lsl #16
-    movk x1, #0x1, lsl #32
+    // 要读取的地址（这里使用一个可能有效的地址，比如程序本身的地址）
+    adr x1, _main
 
     // 要读取的大小
     mov x2, #16
@@ -61,29 +45,30 @@ _read_memory:
     bl _vm_read
 
     // 检查结果
-    cbnz x0, _exit
+    cbnz x0, _print_error
 
-    // 在此处打印或处理读取到的数据
-    // 例如，我们可以打印读取的字节数
-    ldr x0, [sp]
+    // 打印读取的字节数
+    ldr x1, [sp]
+    adr x0, read_msg
     bl _printf
 
-    // 如果想打印读取的数据，可以添加类似下面的代码
-    // ldr x0, [sp, #8]  // 加载读取数据的地址
-    // mov x1, #16       // 打印16个字节
-    // bl _print_memory  // 调用一个打印内存的函数（需要自己实现）
+    b _exit
+
+_print_error:
+    // 打印错误信息
+    mov x1, x0
+    adr x0, error_msg
+    bl _printf
 
 _exit:
     mov x0, #0
     ldp x29, x30, [sp], #40
     ret
 
+.data
+read_msg: .asciz "Read %d bytes\n"
+error_msg: .asciz "Error: %d\n"
+
 .extern _mach_task_self
-.extern _task_for_pid
 .extern _vm_read
 .extern _printf
-
-// 如果想实现打印内存的函数，可以添加类似下面的代码
-// _print_memory:
-//     // 实现打印内存的逻辑
-//     ret
