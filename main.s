@@ -5,21 +5,26 @@ _main:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
 
-    // 例如，读取 PID 为 22496 的进程中地址 0x102DD2404 处的 32 位整数
+    // 设置目标进程的 PID (22496)
     mov x0, #22496       // target_pid
     
-    // 使用 ADRP 和 ADD 加载大的立即数到 x1
-    adrp x1, target_address@PAGE
-    add x1, x1, target_address@PAGEOFF
+    // 加载目标地址 0x102DD2404 到 x1
+    movz x1, #0x2404, lsl #0
+    movk x1, #0x02DD, lsl #16
+    movk x1, #0x0001, lsl #32
 
+    // 调用 read_int32 函数
     bl _read_int32
 
-    ldp x29, x30, [sp], #16
+    // 检查 read_int32 的返回值
+    cmp x0, #0
+    b.ne .exit  // 如果不为 0，直接退出
+
+    // 如果 read_int32 成功，返回 0
     mov x0, #0
+
+.exit:
+    ldp x29, x30, [sp], #16
     ret
 
 .extern _read_int32
-
-.section __DATA,__const
-target_address:
-    .quad 0x102DD2404
