@@ -59,10 +59,9 @@ int c_main(void) {
     printf("最终地址: 0x%llx\n", (unsigned long long)final_address);
 
     // 读取 32 位整数值
-    int32_t value;
-    int read_result = 读内存i32(final_address, &value);
-    if (read_result != 0) {
-        fprintf(stderr, "读取内存失败，错误代码：%d\n", read_result);
+    int32_t value = 读内存i32((vm_address_t)final_address);
+    if (value == 0) {  // 假设0是一个表示读取失败的值，根据实际情况可能需要调整
+        fprintf(stderr, "读取内存失败\n");
         mach_port_deallocate(mach_task_self(), target_task);
         cleanup_memory_module();
         return -1;
