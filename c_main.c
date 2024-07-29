@@ -15,7 +15,7 @@ int c_main(void) {
     }
     printf("内存访问初始化成功\n");
 
-    vm_address_t target_address = 0x104b94fc0;
+    vm_address_t target_address = 0x104BB7C78;
     printf("尝试读取地址 0x%llx\n", (unsigned long long)target_address);
     
     int32_t int_value = 读内存i32(target_address);
