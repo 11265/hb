@@ -19,7 +19,7 @@ int c_main() {
     }
 
     int32_t int32_value;                                        // 32位整数变量
-    if (read_int32(TARGET_ADDRESS, &int32_value) == 0) {        // 读取32位整数
+    if (读内存i32(TARGET_ADDRESS, &int32_value) == 0) {        // 读取32位整数
         printf("读取 int32_t 数据成功: %d\n", int32_value);     // 打印读取的32位整数
     } else {
         printf("读取 int32_t 数据失败\n");                      // 如果读取失败，打印错误信息
