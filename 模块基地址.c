@@ -50,15 +50,26 @@ int64_t read_multi_level_pointer(task_t target_task, vm_address_t base_address, 
     va_start(args, num_offsets);
 
     int64_t current_address = base_address;
+    printf("起始地址: 0x%llx\n", (unsigned long long)current_address);
+
     for (int i = 0; i < num_offsets; i++) {
         int64_t offset = va_arg(args, int64_t);
-        current_address = 读内存i64(current_address);
-        if (current_address == 0) {
-            printf("第 %d 层指针为空\n", i + 1);
-            va_end(args);
-            return 0;
+        
+        if (i < num_offsets - 1) {
+            // 对于除最后一个偏移外的所有偏移，我们读取地址
+            current_address = 读内存i64(current_address);
+            if (current_address == 0) {
+                printf("第 %d 层指针为空\n", i + 1);
+                va_end(args);
+                return 0;
+            }
+            current_address += offset;
+        } else {
+            // 对于最后一个偏移，我们直接返回计算后的值
+            current_address += offset;
         }
-        current_address += offset;
+        
+        printf("第 %d 步: 0x%llx\n", i + 1, (unsigned long long)current_address);
     }
 
     va_end(args);
