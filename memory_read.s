@@ -5,7 +5,7 @@ _main:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
 
-    // Call our read_memory function
+    // 调用我们的 read_memory 函数
     bl _read_memory
 
     mov x0, #0
@@ -17,51 +17,51 @@ _read_memory:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
 
-    // Get the current task
+    // 获取当前任务
     mov x0, #-1  // mach_task_self()
     bl _mach_task_self
 
-    // Store the task port
+    // 存储任务端口
     mov x19, x0
 
-    // Target PID (replace with actual PID)
-    mov x1, #22496
+    // 目标 PID (替换为实际的 PID)
+    mov x1, 22496
 
-    // Pointer to store target task
+    // 用于存储目标任务的指针
     sub sp, sp, #16
     mov x2, sp
 
-    // Call task_for_pid
+    // 调用 task_for_pid
     bl _task_for_pid
 
-    // Check result
+    // 检查结果
     cbnz x0, _exit
 
-    // Load target task
+    // 加载目标任务
     ldr x20, [sp]
 
-    // Address to read from (replace with actual address)
-    mov x1, #0x1000
+    // 要读取的地址 (替换为实际的地址)
+    mov x1, 0x102DD2404
 
-    // Size to read
+    // 要读取的大小
     mov x2, #16
 
-    // Pointer to store read data
+    // 用于存储读取数据的指针
     sub sp, sp, #16
     mov x3, sp
 
-    // Pointer to store bytes read
+    // 用于存储读取字节数的指针
     sub sp, sp, #8
     mov x4, sp
 
-    // Call vm_read
+    // 调用 vm_read
     mov x0, x20
     bl _vm_read
 
-    // Check result
+    // 检查结果
     cbnz x0, _exit
 
-    // Print or process the read data here
+    // 在此处打印或处理读取到的数据
     // ...
 
 _exit:
