@@ -14,9 +14,6 @@ int c_main(void) {
     int32_t int_value = 读内存i32(TARGET_ADDRESS);
     printf("读取的 int32_t 值: %d\n", int_value);
 
-    double double_value = 读内存f64(TARGET_ADDRESS + sizeof(int32_t));
-    printf("读取的 double 值: %f\n", double_value);
-
     cleanup_memory_access();
     return 0;
 }
