@@ -15,19 +15,27 @@ vm_address_t find_module_base(task_t target_task, const char* module_name) {
 
     struct dyld_all_image_infos* all_image_infos = (struct dyld_all_image_infos*)task_dyld_info.all_image_info_addr;
     struct dyld_all_image_infos infos;
-    memcpy(&infos, (void*)异步读内存i64((vm_address_t)all_image_infos), sizeof(infos));
+    if (读内存((vm_address_t)all_image_infos, &infos, sizeof(infos)) != 0) {
+        printf("读取 dyld_all_image_infos 失败\n");
+        return 0;
+    }
+
+    printf("找到 %d 个模块\n", infos.infoArrayCount);
 
     for (uint32_t i = 0; i < infos.infoArrayCount; i++) {
         struct dyld_image_info image_info;
-        memcpy(&image_info, (void*)异步读内存i64((vm_address_t)&infos.infoArray[i]), sizeof(image_info));
-
-        char path[1024];
-        vm_address_t path_address = (vm_address_t)image_info.imageFilePath;
-        for (int j = 0; j < sizeof(path); j += 8) {
-            int64_t chunk = 异步读内存i64(path_address + j);
-            memcpy(path + j, &chunk, (j + 8 <= sizeof(path)) ? 8 : sizeof(path) - j);
+        if (读内存((vm_address_t)&infos.infoArray[i], &image_info, sizeof(image_info)) != 0) {
+            printf("读取 dyld_image_info %d 失败\n", i);
+            continue;
         }
-        path[sizeof(path) - 1] = '\0';
+
+        char path[1024] = {0};
+        if (读内存((vm_address_t)image_info.imageFilePath, path, sizeof(path) - 1) != 0) {
+            printf("读取模块 %d 路径失败\n", i);
+            continue;
+        }
+
+        printf("模块 %d: %s, 基地址: 0x%llx\n", i, path, (unsigned long long)image_info.imageLoadAddress);
 
         if (strstr(path, module_name) != NULL) {
             return (vm_address_t)image_info.imageLoadAddress;
@@ -44,9 +52,13 @@ int64_t read_multi_level_pointer(task_t target_task, vm_address_t base_address, 
     int64_t current_address = base_address;
     for (int i = 0; i < num_offsets; i++) {
         int64_t offset = va_arg(args, int64_t);
-        current_address = 异步读内存i64(current_address);
+        if (读内存i64(current_address, &current_address) != 0) {
+            printf("无法读取第 %d 层指针\n", i + 1);
+            va_end(args);
+            return 0;
+        }
         if (current_address == 0) {
-            printf("无效的地址在第 %d 层指针\n", i + 1);
+            printf("第 %d 层指针为空\n", i + 1);
             va_end(args);
             return 0;
         }
