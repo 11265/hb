@@ -1,6 +1,5 @@
 #include "内存模块.h"
 #include "查找进程.h"
-#include "模块基地址.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <mach/mach.h>
@@ -32,34 +31,12 @@ int c_main(void) {
     }
     printf("成功获取目标进程的 task\n");
 
-    vm_address_t base_address = find_module_base(target_task, "pvz");  // 查找"pvz"模块的基地址
-    if (base_address == 0) {
-        fprintf(stderr, "未找到 pvz 模块\n");
-        mach_port_deallocate(mach_task_self(), target_task);
-        cleanup_memory_module();
-        return -1;
-    }
-    printf("pvz 模块基地址: 0x%llx\n", (unsigned long long)base_address);
-
-    // 定义偏移量
-    int64_t offset1 = 0x20A7AA0;
-    int64_t offset2 = 0x400;  // 修正为 0x400
-    int num_offsets = 2;
-
-    // 读取多级指针
-    int64_t final_address = read_multi_level_pointer(target_task, base_address, num_offsets, offset1, offset2);
-    
-    if (final_address == 0) {
-        fprintf(stderr, "无法读取多级指针\n");
-        mach_port_deallocate(mach_task_self(), target_task);
-        cleanup_memory_module();
-        return -1;
-    }
-
-    printf("最终地址: 0x%llx\n", (unsigned long long)final_address);
+    // 使用一个固定的地址进行演示
+    vm_address_t test_address = 0x102705358;  // 这只是一个示例地址，实际使用时需要替换为有效的地址
+    printf("测试地址: 0x%llx\n", (unsigned long long)test_address);
 
     // 读取 32 位整数值
-    int32_t value = 读内存i32((vm_address_t)final_address);
+    int32_t value = 读内存i32(test_address);
     if (value == 0) {  // 假设0是一个表示读取失败的值，根据实际情况可能需要调整
         fprintf(stderr, "读取内存失败\n");
         mach_port_deallocate(mach_task_self(), target_task);
