@@ -364,6 +364,3 @@ void cleanup_memory_module(void) {
 
     mach_port_deallocate(mach_task_self(), target_task);
 }
-
-
-
