@@ -7,7 +7,7 @@
 static mach_port_t global_task_port;
 static bool is_task_port_initialized = false;
 
-static kern_return_t initialize_task_port(pid_t pid) {
+int initialize_task_port(pid_t pid) {
     if (is_task_port_initialized) {
         return KERN_SUCCESS;
     }
@@ -40,9 +40,7 @@ static kern_return_t read_memory_from_task(mach_vm_address_t address, size_t siz
 
 int read_int32(mach_vm_address_t address, int32_t *value) {
     if (!is_task_port_initialized) {
-        if (initialize_task_port(22496) != KERN_SUCCESS) {
-            return -1;
-        }
+        return -1;
     }
 
     kern_return_t kret = read_memory_from_task(address, sizeof(int32_t), value);
@@ -54,9 +52,7 @@ int read_int32(mach_vm_address_t address, int32_t *value) {
 
 int read_int64(mach_vm_address_t address, int64_t *value) {
     if (!is_task_port_initialized) {
-        if (initialize_task_port(22496) != KERN_SUCCESS) {
-            return -1;
-        }
+        return -1;
     }
 
     kern_return_t kret = read_memory_from_task(address, sizeof(int64_t), value);
