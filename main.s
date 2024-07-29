@@ -1,16 +1,13 @@
-.global _main
-.align 2
+.global _main                                  // 声明_main为全局符号
+.align 2                                       // 确保代码按4字节对齐
 
-_main:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
+_main:                                         // _main函数入口点
+    stp x29, x30, [sp, #-16]!                  // 保存帧指针和返回地址
+    mov x29, sp                                // 设置新的帧指针
 
-    // 调用 c_main 函数
-    bl _c_main
+    bl _c_main                                 // 分支并链接到_c_main函数
 
-    // c_main 的返回值已经在 x0 中，无需额外处理
+    ldp x29, x30, [sp], #16                    // 恢复帧指针和返回地址
+    ret                                        // 返回
 
-    ldp x29, x30, [sp], #16
-    ret
-
-.extern _c_main
+.extern _c_main                                // 声明_c_main为外部符号
