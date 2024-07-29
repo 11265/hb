@@ -10,11 +10,11 @@
 #include <string.h>
 
 static void *mapped_memory = NULL;
-static mach_vm_size_t mapped_size = 0;
-static mach_vm_address_t base_address = 0;
+static vm_size_t mapped_size = 0;
+static vm_address_t base_address = 0;
 static task_t target_task = MACH_PORT_NULL;
 
-int initialize_memory_access(pid_t pid, mach_vm_address_t address, mach_vm_size_t size) {
+int initialize_memory_access(pid_t pid, vm_address_t address, vm_size_t size) {
     kern_return_t kr;
 
     // 获取目标进程的task
@@ -29,9 +29,9 @@ int initialize_memory_access(pid_t pid, mach_vm_address_t address, mach_vm_size_
     mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
     mach_port_t object_name;
 
-    kr = mach_vm_region(target_task, &address, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &info_count, &object_name);
+    kr = vm_region_64(target_task, &address, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &info_count, &object_name);
     if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "mach_vm_region failed: %s (err: %d)\n", mach_error_string(kr), kr);
+        fprintf(stderr, "vm_region_64 failed: %s (err: %d)\n", mach_error_string(kr), kr);
         return -1;
     }
 
@@ -43,10 +43,10 @@ int initialize_memory_access(pid_t pid, mach_vm_address_t address, mach_vm_size_
     }
 
     // 读取目标进程内存
-    mach_vm_size_t bytes_read;
-    kr = mach_vm_read_overwrite(target_task, address, size, (mach_vm_address_t)mapped_memory, &bytes_read);
+    vm_size_t bytes_read;
+    kr = vm_read_overwrite(target_task, address, size, (vm_address_t)mapped_memory, &bytes_read);
     if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "mach_vm_read_overwrite failed: %s (err: %d)\n", mach_error_string(kr), kr);
+        fprintf(stderr, "vm_read_overwrite failed: %s (err: %d)\n", mach_error_string(kr), kr);
         munmap(mapped_memory, size);
         return -1;
     }
@@ -70,7 +70,7 @@ void cleanup_memory_access() {
     }
 }
 
-static void* get_mapped_address(mach_vm_address_t address) {
+static void* get_mapped_address(vm_address_t address) {
     if (mapped_memory == NULL || address < base_address || address >= base_address + mapped_size) {
         return NULL;
     }
@@ -78,25 +78,25 @@ static void* get_mapped_address(mach_vm_address_t address) {
 }
 
 // 读取函数
-int32_t 读内存i32(mach_vm_address_t address) {
+int32_t 读内存i32(vm_address_t address) {
     void* mapped_addr = get_mapped_address(address);
     if (mapped_addr == NULL) return 0;
     return *(int32_t*)mapped_addr;
 }
 
-int64_t 读内存i64(mach_vm_address_t address) {
+int64_t 读内存i64(vm_address_t address) {
     void* mapped_addr = get_mapped_address(address);
     if (mapped_addr == NULL) return 0;
     return *(int64_t*)mapped_addr;
 }
 
-float 读内存f32(mach_vm_address_t address) {
+float 读内存f32(vm_address_t address) {
     void* mapped_addr = get_mapped_address(address);
     if (mapped_addr == NULL) return 0.0f;
     return *(float*)mapped_addr;
 }
 
-double 读内存f64(mach_vm_address_t address) {
+double 读内存f64(vm_address_t address) {
     void* mapped_addr = get_mapped_address(address);
     if (mapped_addr == NULL) return 0.0;
     return *(double*)mapped_addr;
