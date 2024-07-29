@@ -1,42 +1,14 @@
-#include "memory_read.h"
+#include "内存模块.h"
 #include <stdio.h>
 
 #define TARGET_PID 22496
 #define TARGET_ADDRESS 0x102DD2404
 
-int c_main() {
+int c_main() 
+{
     printf("目标进程 PID: %d\n", TARGET_PID);
     printf("目标内存地址: 0x%x\n", TARGET_ADDRESS);
-    
-    HANDLE process_handle;
-    kern_return_t kr = task_for_pid(mach_task_self(), TARGET_PID, &process_handle);
-    if (kr != KERN_SUCCESS) {
-        printf("无法获取目标进程的任务端口。错误码: %d (%s)\n", kr, mach_error_string(kr));
-        return 1;
-    }
 
-    DWORD int32_value = read_int32(process_handle, TARGET_ADDRESS);
-    printf("读取的 int32 值: %d\n", int32_value);
-
-    long long int64_value = read_int64(process_handle, TARGET_ADDRESS);
-    printf("读取的 int64 值: %lld\n", int64_value);
-
-    float float_value = read_float(process_handle, TARGET_ADDRESS);
-    printf("读取的 float 值: %f\n", float_value);
-
-    double double_value = read_double(process_handle, TARGET_ADDRESS);
-    printf("读取的 double 值: %lf\n", double_value);
-
-    unsigned char bytes[16];
-    if (read_bytes(process_handle, TARGET_ADDRESS, 16, bytes)) {
-        printf("读取的字节: ");
-        for (int i = 0; i < 16; i++) {
-            printf("%02X ", bytes[i]);
-        }
-        printf("\n");
-    }
-
-    mach_port_deallocate(mach_task_self(), process_handle);
     printf("c_main 执行完成\n");
     return 0;
 }
