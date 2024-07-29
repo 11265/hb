@@ -18,6 +18,7 @@ typedef enum {
 
 // 函数声明
 int read_typed_memory(pid_t target_pid, vm_address_t target_address, MemoryType type, size_t size);
+int read_int32(pid_t target_pid, vm_address_t target_address);
 
 // 实现 read_typed_memory 函数
 int read_typed_memory(pid_t target_pid, vm_address_t target_address, MemoryType type, size_t size) {
@@ -37,7 +38,7 @@ int read_typed_memory(pid_t target_pid, vm_address_t target_address, MemoryType 
     }
     printf("成功分配内存\n");
 
-    mach_msg_type_number_t data_size = size;
+    vm_size_t data_size = size;
     kr = vm_read_overwrite(task, target_address, size, (vm_address_t)data, &data_size);
     if (kr != KERN_SUCCESS) {
         printf("无法读取内存。错误码: %d (%s)\n", kr, mach_error_string(kr));
@@ -76,7 +77,6 @@ int read_typed_memory(pid_t target_pid, vm_address_t target_address, MemoryType 
 }
 
 int c_main() {
-    //printf("开始执行 c_main\n");
     printf("目标进程 PID: %d\n", TARGET_PID);
     printf("目标内存地址: 0x%llx\n", (unsigned long long)TARGET_ADDRESS);
     
@@ -86,7 +86,6 @@ int c_main() {
             printf("准备读取 INT32\n");
             result = read_int32(TARGET_PID, TARGET_ADDRESS);
             break;
-        // 其他 case 保持不变...
         default:
             printf("未知的内存类型\n");
             return 1;
@@ -99,4 +98,9 @@ int c_main() {
 
     printf("c_main 执行完成\n");
     return 0;
+}
+
+// 实现 read_int32 函数
+int read_int32(pid_t target_pid, vm_address_t target_address) {
+    return read_typed_memory(target_pid, target_address, TYPE_INT32, sizeof(int32_t));
 }
