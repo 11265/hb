@@ -7,7 +7,7 @@
 #define TARGET_PROCESS_NAME "pvz"
 
 int main() {
-    pid_t target_pid = 查找进程(TARGET_PROCESS_NAME);
+    pid_t target_pid = get_pid_by_name(TARGET_PROCESS_NAME);
     if (target_pid == -1) {
         printf("无法找到目标进程: %s\n", TARGET_PROCESS_NAME);
         return 1;
@@ -69,7 +69,8 @@ int main() {
         char* read_string = (char*)读任意地址(test_address, test_string_length);
         if (read_string) {
             printf("写入字符串: %s\n读取字符串: %s\n", test_string, read_string);
-            if (read_string != (void*)((char*)get_or_create_page(test_address)->mapped_memory + (test_address & (PAGE_SIZE - 1)))) {
+            MemoryRegion* region = get_or_create_page(test_address);
+            if (read_string != (void*)((char*)region->mapped_memory + (test_address & (PAGE_SIZE - 1)))) {
                 free(read_string);
             }
         } else {
