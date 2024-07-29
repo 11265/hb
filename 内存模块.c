@@ -33,6 +33,11 @@ static void read_memory_from_task(mach_vm_address_t address, size_t size, void *
     vm_read_overwrite(global_task_port, address, size, (vm_address_t)buffer, &data_size);
 }
 
+static void write_memory_to_task(mach_vm_address_t address, size_t size, void *data) {
+    vm_write(global_task_port, address, (vm_offset_t)data, size);
+}
+
+// 读取函数
 int32_t 读内存i32(mach_vm_address_t address) {
     int32_t value = 0;
     read_memory_from_task(address, sizeof(int32_t), &value);
@@ -55,4 +60,21 @@ double 读内存f64(mach_vm_address_t address) {
     double value = 0.0;
     read_memory_from_task(address, sizeof(double), &value);
     return value;
+}
+
+// 写入函数
+void 写内存i32(mach_vm_address_t address, int32_t value) {
+    write_memory_to_task(address, sizeof(int32_t), &value);
+}
+
+void 写内存i64(mach_vm_address_t address, int64_t value) {
+    write_memory_to_task(address, sizeof(int64_t), &value);
+}
+
+void 写内存f32(mach_vm_address_t address, float value) {
+    write_memory_to_task(address, sizeof(float), &value);
+}
+
+void 写内存f64(mach_vm_address_t address, double value) {
+    write_memory_to_task(address, sizeof(double), &value);
 }
