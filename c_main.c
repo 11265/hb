@@ -3,31 +3,48 @@
 #include <stdlib.h>
 #include <string.h>
 #include <mach/mach.h>
-#include <libproc.h>
+#include <dirent.h>
+#include <ctype.h>
 
-#define MAX_PROCESS_NAME_LENGTH 1024
 #define TARGET_PROCESS_NAME "pvz"
+#define MAX_PATH 1024
 
-// 通过进程名称获取PID
 pid_t get_pid_by_name(const char *process_name) {
-    pid_t pids[2048];
-    int bytes = proc_listpids(PROC_ALL_PIDS, 0, pids, sizeof(pids));
-    int n_proc = bytes / sizeof(pids[0]);
-    
-    for (int i = 0; i < n_proc; i++) {
-        char name[MAX_PROCESS_NAME_LENGTH];
-        proc_name(pids[i], name, sizeof(name));
-        if (strcmp(name, process_name) == 0) {
-            return pids[i];
-        }
+    DIR *dir;
+    struct dirent *ent;
+    char path[MAX_PATH], cmdline[MAX_PATH];
+    FILE *fp;
+
+    if ((dir = opendir("/proc")) == NULL) {
+        perror("无法打开 /proc 目录");
+        return -1;
     }
+
+    while ((ent = readdir(dir)) != NULL) {
+        if (!isdigit(*ent->d_name))
+            continue;
+
+        snprintf(path, sizeof(path), "/proc/%s/cmdline", ent->d_name);
+        if ((fp = fopen(path, "r")) == NULL)
+            continue;
+
+        if (fgets(cmdline, sizeof(cmdline), fp) != NULL) {
+            fclose(fp);
+            if (strstr(cmdline, process_name) != NULL) {
+                closedir(dir);
+                return atoi(ent->d_name);
+            }
+        }
+        fclose(fp);
+    }
+
+    closedir(dir);
     return -1;
 }
 
 int c_main(void) {
     pid_t target_pid = get_pid_by_name(TARGET_PROCESS_NAME);
-    if (target_pid == -1) 
-    {
+    if (target_pid == -1) {
         fprintf(stderr, "未找到进程：%s\n", TARGET_PROCESS_NAME);
         return -1;
     }
