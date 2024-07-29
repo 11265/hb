@@ -1,4 +1,20 @@
 .equ TARGET_PID, 1234  // 将这里的1234替换为目标进程的实际PID
+.global _main
+.align 2
+
+
+_main:
+    // Save link register
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+
+    // Call our mmap_and_read_memory function
+    bl _mmap_and_read_memory
+
+    // Exit program
+    mov x0, #0
+    ldp x29, x30, [sp], #16
+    ret
 
 .global _mmap_and_read_memory
 _mmap_and_read_memory:
