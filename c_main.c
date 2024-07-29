@@ -7,7 +7,6 @@
 
 #define TARGET_PROCESS_NAME "pvz"
 
-
 int c_main(void) {
     pid_t target_pid = get_pid_by_name(TARGET_PROCESS_NAME);
     if (target_pid == -1) {
@@ -23,6 +22,14 @@ int c_main(void) {
         return -1;
     }
     printf("内存模块初始化成功\n");
+
+    // 获取目标进程的 task
+    task_t target_task;
+    if (task_for_pid(mach_task_self(), target_pid, &target_task) != KERN_SUCCESS) {
+        fprintf(stderr, "无法获取目标进程的 task\n");
+        cleanup_memory_module();
+        return -1;
+    }
 
     // 查找 "pvz" 模块的基地址
     vm_address_t base_address = find_module_base(target_task, "pvz");
@@ -42,6 +49,9 @@ int c_main(void) {
         printf("多层指针读取结果: 0x%llx, 值: %d (0x%x)\n", 
                (unsigned long long)final_address, value, value);
     }
+
+    // 释放目标进程的 task
+    mach_port_deallocate(mach_task_self(), target_task);
 
     cleanup_memory_module();
     printf("清理完成\n");
