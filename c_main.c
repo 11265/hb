@@ -13,7 +13,7 @@ int c_main() {
     printf("目标进程 PID: %d\n", TARGET_PID);                   // 打印目标进程ID
     printf("目标内存地址: 0x%llx\n", (unsigned long long)TARGET_ADDRESS);  // 打印目标内存地址
 
-    初始化()
+    初始化();
 
     int32_t int32_value;                                        // 32位整数变量
     if (读内存i32(TARGET_ADDRESS, &int32_value) == 0) {        // 读取32位整数
