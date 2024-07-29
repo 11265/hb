@@ -23,7 +23,7 @@ int c_main() {
     printf("内存模块初始化成功\n");
 
     // 测试读写不同类型的内存
-    vm_address_t test_address = 0x1000000; // 假设这是一个有效的内存地址
+    vm_address_t test_address = 0x1060E1388; // 假设这是一个有效的内存地址
 
     // 测试 int32
     int32_t write_value_i32 = 42;
