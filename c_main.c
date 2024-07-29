@@ -38,9 +38,9 @@ static void cleanup_task_port() {
 static kern_return_t read_memory_from_task(mach_vm_address_t address, size_t size, void **buffer) {
     mach_vm_size_t data_size = size;
     vm_offset_t read_buffer;
-    kern_return_t kret = mach_vm_read_overwrite(global_task_port, address, size, &read_buffer, &data_size);
+    kern_return_t kret = vm_read_overwrite(global_task_port, address, size, &read_buffer, &data_size);
     if (kret != KERN_SUCCESS) {
-        printf("mach_vm_read_overwrite 失败: %s\n", mach_error_string(kret));
+        printf("vm_read_overwrite 失败: %s\n", mach_error_string(kret));
         return kret;
     }
 
@@ -124,7 +124,6 @@ int c_main() {
     printf("c_main 执行完成\n");
     return 0;
 }
-
 
 
 
