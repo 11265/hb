@@ -3,7 +3,11 @@
 #include <mach/mach.h>
 #include <mach/mach_error.h>
 
-// 添加类型定义
+// 全局定义
+#define TARGET_PID 22496
+#define TARGET_ADDRESS 0x102DD2404
+#define MEMORY_TYPE TYPE_INT32
+
 typedef enum {
     TYPE_INT32,
     TYPE_INT64,
@@ -12,7 +16,7 @@ typedef enum {
     TYPE_BYTES
 } MemoryType;
 
-// 声明 read_typed_memory 函数
+// 函数声明
 int read_typed_memory(pid_t target_pid, vm_address_t target_address, MemoryType type, size_t size);
 
 // 实现 read_typed_memory 函数
@@ -84,4 +88,39 @@ int read_double(pid_t target_pid, vm_address_t target_address) {
 // 读取指定字节数
 int read_bytes(pid_t target_pid, vm_address_t target_address, size_t size) {
     return read_typed_memory(target_pid, target_address, TYPE_BYTES, size);
+}
+
+// 新的主函数
+int c_main() {
+    printf("目标进程 PID: %d\n", TARGET_PID);
+    printf("目标内存地址: 0x%llx\n", (unsigned long long)TARGET_ADDRESS);
+    
+    int result;
+    switch (MEMORY_TYPE) {
+        case TYPE_INT32:
+            result = read_int32(TARGET_PID, TARGET_ADDRESS);
+            break;
+        case TYPE_INT64:
+            result = read_int64(TARGET_PID, TARGET_ADDRESS);
+            break;
+        case TYPE_FLOAT:
+            result = read_float(TARGET_PID, TARGET_ADDRESS);
+            break;
+        case TYPE_DOUBLE:
+            result = read_double(TARGET_PID, TARGET_ADDRESS);
+            break;
+        case TYPE_BYTES:
+            result = read_bytes(TARGET_PID, TARGET_ADDRESS, 16); // 假设读取16字节
+            break;
+        default:
+            printf("未知的内存类型\n");
+            return 1;
+    }
+
+    if (result != 0) {
+        printf("读取失败\n");
+        return 1;
+    }
+
+    return 0;
 }
