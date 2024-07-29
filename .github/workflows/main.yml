@@ -13,25 +13,23 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     
-    - name: Install iOS toolchain
-      run: |
-        brew update
-        brew install --cask xcode
-        sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-        brew install cctools
-    
+    - name: Set up Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest-stable
+
     - name: Set up environment
       run: |
         echo "SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)" >> $GITHUB_ENV
-        echo "$(xcrun --sdk iphoneos -f as)" >> $GITHUB_PATH
+        echo "$(xcrun --sdk iphoneos -f clang)" >> $GITHUB_PATH
     
     - name: Assemble
       run: |
-        as -arch arm64 -o mmap_memory.o mmap_memory.s
+        xcrun --sdk iphoneos clang -arch arm64 -c mmap_memory.s -o mmap_memory.o
       
     - name: Link
       run: |
-        ld -arch arm64 -ios_version_min 12.0 -o mmap_memory mmap_memory.o -lSystem -syslibroot $SDKROOT
+        xcrun --sdk iphoneos clang -arch arm64 -isysroot $SDKROOT -mios-version-min=12.0 -o mmap_memory mmap_memory.o
     
     - name: Upload artifact
       uses: actions/upload-artifact@v2
