@@ -4,7 +4,7 @@
 #include <mach/mach.h>
 
 #define TARGET_PID 23569
-#define MAP_SIZE 0x20000000  // 增加到 512MB
+#define MAP_SIZE 0x40000000  // 1GB
 
 int c_main(void) {
     kern_return_t kr;
@@ -36,17 +36,22 @@ int c_main(void) {
 
     printf("目标进程的基地址: 0x%llx\n", (unsigned long long)base_address);
 
-    int result = initialize_memory_access(TARGET_PID, base_address, MAP_SIZE);
+    vm_address_t start_address = base_address;
+    vm_address_t end_address = base_address + MAP_SIZE;
+    vm_address_t target_address = 0x104bb7c78;  // 我们想要读取的地址
+
+    if (target_address < start_address || target_address >= end_address) {
+        fprintf(stderr, "目标地址 0x%llx 不在映射范围内\n", (unsigned long long)target_address);
+        return -1;
+    }
+
+    int result = initialize_memory_access(TARGET_PID, start_address, MAP_SIZE);
     if (result != 0) {
         fprintf(stderr, "无法初始化内存访问，错误代码：%d\n", result);
         return -1;
     }
     printf("内存访问初始化成功\n");
 
-    // 计算相对于基地址的偏移
-    vm_address_t offset = 0x104bb7c78 - 0x102adc000;
-    vm_address_t target_address = base_address + offset;
-    
     printf("尝试读取地址 0x%llx\n", (unsigned long long)target_address);
     
     int32_t int_value = 读内存i32(target_address);
