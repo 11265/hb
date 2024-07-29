@@ -7,8 +7,8 @@
 #include <pthread.h>
 
 #define ALIGN4(size) (((size) + 3) & ~3)
-//#define PAGE_SIZE 4096
-//#define PAGE_MASK (~(PAGE_SIZE - 1))
+#define PAGE_SIZE 4096
+#define PAGE_MASK (~(PAGE_SIZE - 1))
 
 typedef struct {
     pthread_t thread;
@@ -216,9 +216,7 @@ int 写内存f64(vm_address_t address, double value) {
     return 写任意地址(address, &value, sizeof(double));
 }
 
-static void* mapper_thread_func(void* arg) {
-    ThreadInfo* info = (ThreadInfo*)arg;
-    
+void* 处理内存请求(void* arg) {
     while (1) {
         pthread_mutex_lock(&requests_mutex);
         while (num_pending_requests == 0 && !stop_threads) {
@@ -238,25 +236,27 @@ static void* mapper_thread_func(void* arg) {
         }
         pthread_mutex_unlock(&requests_mutex);
 
-        if (num_pending_requests > 0) {
-            if (request.is_write) {
-                int result = 写任意地址(request.address, &request.write_value, sizeof(request.write_value));
-                *(int*)request.result = result;
-            } else {
-                void* result = 读任意地址(request.address, request.size);
-                if (result) {
-                    memcpy(request.result, result, request.size);
-                    if (result != (void*)((char*)get_or_create_page(request.address)->mapped_memory + (request.address & (PAGE_SIZE - 1)))) {
-                        free(result);
-                    }
-                } else {
-                    memset(request.result, 0, request.size);
+        if (request.operation == 1) { // 写操作
+            int result = 写任意地址(request.address, request.buffer, request.size);
+            *(int*)request.result = result;
+        } else { // 读操作
+            void* result = 读任意地址(request.address, request.size);
+            if (result) {
+                memcpy(request.result, result, request.size);
+                if (result != (void*)((char*)get_or_create_page(request.address)->mapped_memory + (request.address & (PAGE_SIZE - 1)))) {
+                    free(result);
                 }
+            } else {
+                memset(request.result, 0, request.size);
             }
         }
     }
     
     return NULL;
+}
+
+static void* mapper_thread_func(void* arg) {
+    return 处理内存请求(arg);
 }
 
 int 初始化内存模块(pid_t pid) {
