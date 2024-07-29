@@ -1,4 +1,4 @@
-name: iOS ARM64 Assembly and C Build
+name: iOS Build
 
 on:
   push:
@@ -9,34 +9,33 @@ on:
 jobs:
   build:
     runs-on: macos-latest
-    
+
     steps:
     - uses: actions/checkout@v2
-    
-    - name: Set up Xcode
-      uses: maxim-lobanov/setup-xcode@v1
-      with:
-        xcode-version: latest-stable
 
-    - name: Set up environment
-      run: |
-        echo "SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)" >> $GITHUB_ENV
-        echo "$(xcrun --sdk iphoneos -f clang)" >> $GITHUB_PATH
-    
-    - name: Compile Assembly
-      run: |
-        xcrun --sdk iphoneos clang -arch arm64 -c main.s -o main.o -mios-version-min=12.0
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode.app
 
-    - name: Compile C
+    - name: Setup iOS SDK
       run: |
-        xcrun --sdk iphoneos clang -arch arm64 -c memory_read.c -o memory_read.o -mios-version-min=12.0
+        SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+        echo "SDKROOT=$SDKROOT" >> $GITHUB_ENV
 
-    - name: Link
+    - name: Compile C files
       run: |
-        xcrun --sdk iphoneos clang -arch arm64 -isysroot $SDKROOT -mios-version-min=12.0 -o memory_read main.o memory_read.o -framework Foundation -framework CoreFoundation
-    
-    - name: Upload artifact
+        clang -c 内存模块.c -o 内存模块.o -target arm64-apple-ios -isysroot $SDKROOT
+        clang -c c_main.txt -o c_main.o -target arm64-apple-ios -isysroot $SDKROOT
+
+    - name: Assemble main.s
+      run: |
+        as -arch arm64 -o main.o main.s
+
+    - name: Link object files
+      run: |
+        ld -o main main.o c_main.o 内存模块.o -lSystem -syslibroot $SDKROOT -arch arm64 -platform_version ios 14.0 14.0
+
+    - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
-        name: memory_read
-        path: memory_read
+        name: ios-arm64-binary
+        path: main
