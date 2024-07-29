@@ -21,10 +21,13 @@ jobs:
         SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
         echo "SDKROOT=$SDKROOT" >> $GITHUB_ENV
 
+    - name: List directory contents
+      run: ls -la
+
     - name: Compile C files
       run: |
         clang -c 内存模块.c -o 内存模块.o -target arm64-apple-ios -isysroot $SDKROOT
-        clang -c c_main.txt -o c_main.o -target arm64-apple-ios -isysroot $SDKROOT
+        clang -c c_main.c -o c_main.o -target arm64-apple-ios -isysroot $SDKROOT
 
     - name: Assemble main.s
       run: |
