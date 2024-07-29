@@ -42,7 +42,7 @@ int c_main(void) {
     printf("pvz 模块基地址: 0x%llx\n", (unsigned long long)base_address);
 
     // 定义偏移量
-    int64_t offset1 = 0x20A7AA0;
+    int64_t offset1 = 0x20A7AA0;// 替换为实际的偏移量
     int64_t offset2 = 0x0;  // 替换为实际的偏移量
     int num_offsets = 2;  // 使用的偏移量数量
 
