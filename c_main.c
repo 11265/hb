@@ -4,6 +4,8 @@
 #include <string.h>
 #include <mach/mach.h>
 #include <sys/sysctl.h>
+#include <errno.h>
+#include <stdbool.h>
 
 #define TARGET_PROCESS_NAME "pvz"
 #define PROC_PIDPATHINFO_MAXSIZE  (4 * MAXPATHLEN)
