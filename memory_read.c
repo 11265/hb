@@ -75,8 +75,6 @@ int read_typed_memory(pid_t target_pid, vm_address_t target_address, MemoryType 
     return 0;
 }
 
-// 其他函数保持不变...
-
 int c_main() {
     //printf("开始执行 c_main\n");
     printf("目标进程 PID: %d\n", TARGET_PID);
