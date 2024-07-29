@@ -17,39 +17,43 @@ static task_t target_task = MACH_PORT_NULL;
 int initialize_memory_access(pid_t pid, vm_address_t address, vm_size_t size) {
     kern_return_t kr;
 
-    // 获取目标进程的task
+    printf("正在获取目标进程 (PID: %d) 的 task...\n", pid);
     kr = task_for_pid(mach_task_self(), pid, &target_task);
     if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "task_for_pid failed: %s (err: %d)\n", mach_error_string(kr), kr);
+        fprintf(stderr, "task_for_pid 失败: %s (err: %d)\n", mach_error_string(kr), kr);
         return -1;
     }
+    printf("成功获取目标进程的 task\n");
 
-    // 获取内存区域信息
+    printf("正在获取内存区域信息...\n");
     vm_region_basic_info_data_64_t info;
     mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
     mach_port_t object_name;
 
     kr = vm_region_64(target_task, &address, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &info_count, &object_name);
     if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "vm_region_64 failed: %s (err: %d)\n", mach_error_string(kr), kr);
-        return -1;
+        fprintf(stderr, "vm_region_64 失败: %s (err: %d)\n", mach_error_string(kr), kr);
+        return -2;
     }
+    printf("成功获取内存区域信息\n");
 
-    // 分配本地内存
+    printf("正在分配本地内存...\n");
     mapped_memory = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
     if (mapped_memory == MAP_FAILED) {
-        fprintf(stderr, "mmap failed: %s (errno: %d)\n", strerror(errno), errno);
-        return -1;
+        fprintf(stderr, "mmap 失败: %s (errno: %d)\n", strerror(errno), errno);
+        return -3;
     }
+    printf("成功分配本地内存\n");
 
-    // 读取目标进程内存
+    printf("正在读取目标进程内存...\n");
     vm_size_t bytes_read;
     kr = vm_read_overwrite(target_task, address, size, (vm_address_t)mapped_memory, &bytes_read);
     if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "vm_read_overwrite failed: %s (err: %d)\n", mach_error_string(kr), kr);
+        fprintf(stderr, "vm_read_overwrite 失败: %s (err: %d)\n", mach_error_string(kr), kr);
         munmap(mapped_memory, size);
-        return -1;
+        return -4;
     }
+    printf("成功读取目标进程内存，读取了 %llu 字节\n", (unsigned long long)bytes_read);
 
     mapped_size = bytes_read;
     base_address = address;
