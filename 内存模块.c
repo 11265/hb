@@ -36,6 +36,7 @@ int initialize_memory_access(pid_t pid, vm_address_t address, vm_size_t size) {
         return -2;
     }
     printf("成功获取内存区域信息\n");
+    printf("区域地址: 0x%llx, 大小: 0x%llx\n", (unsigned long long)address, (unsigned long long)size);
 
     printf("正在分配本地内存...\n");
     mapped_memory = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
@@ -58,6 +59,8 @@ int initialize_memory_access(pid_t pid, vm_address_t address, vm_size_t size) {
     mapped_size = bytes_read;
     base_address = address;
 
+    printf("映射内存范围：0x%llx - 0x%llx\n", (unsigned long long)base_address, (unsigned long long)(base_address + mapped_size));
+
     return 0;
 }
 
@@ -76,15 +79,21 @@ void cleanup_memory_access() {
 
 static void* get_mapped_address(vm_address_t address) {
     if (mapped_memory == NULL || address < base_address || address >= base_address + mapped_size) {
+        fprintf(stderr, "错误：地址 0x%llx 超出映射范围 (0x%llx - 0x%llx)\n", 
+                (unsigned long long)address, 
+                (unsigned long long)base_address, 
+                (unsigned long long)(base_address + mapped_size));
         return NULL;
     }
     return (void*)((char*)mapped_memory + (address - base_address));
 }
 
-// 读取函数
 int32_t 读内存i32(vm_address_t address) {
     void* mapped_addr = get_mapped_address(address);
-    if (mapped_addr == NULL) return 0;
+    if (mapped_addr == NULL) {
+        fprintf(stderr, "错误：无法从地址 0x%llx 读取\n", (unsigned long long)address);
+        return 0;
+    }
     return *(int32_t*)mapped_addr;
 }
 
