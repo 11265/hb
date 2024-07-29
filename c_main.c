@@ -67,8 +67,8 @@ int c_main() {
     const char* test_string = "Hello, World!";
     size_t test_string_length = strlen(test_string) + 1; // 包括空字符
 
-    if (写任意地址(test_address, test_string, test_string_length) == 0) {
-        char* read_string = (char*)读任意地址(test_address, test_string_length);
+    if (写任意地址(0x200000000, test_string, test_string_length) == 0) {
+        char* read_string = (char*)读任意地址(0x200000000, test_string_length);
         if (read_string) {
             printf("写入字符串: %s\n读取字符串: %s\n", test_string, read_string);
             free(read_string);  // 释放读取的字符串内存
