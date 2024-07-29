@@ -1,4 +1,5 @@
 #include "查找进程.h"
+#include <stdbool.h>  // 添加这行
 
 static int get_proc_list(kinfo_proc **procList, size_t *procCount) {
     int                 err;
