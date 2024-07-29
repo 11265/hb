@@ -2,6 +2,7 @@
 #define MEMORY_READ_H
 
 #include <mach/mach.h>
+#include <sys/types.h>  // Add this line to include pid_t definition
 
 int initialize_task_port(pid_t pid);
 void cleanup_task_port();
