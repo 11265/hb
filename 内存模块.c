@@ -4,7 +4,6 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <time.h>
-#include <mach/arm/thread_status.h>
 
 static MemoryRegion *cached_regions = NULL;
 static int num_cached_regions = 0;
@@ -51,7 +50,7 @@ static int map_new_region(vm_address_t address) {
     kern_return_t kr;
     vm_address_t region_start = address & ~(REGION_SIZE - 1);
     vm_size_t size = REGION_SIZE;
-    vm_size_t bytes_read;
+    mach_vm_size_t bytes_read;
 
     pthread_mutex_lock(&regions_mutex);
     adjust_cache_size();
@@ -106,208 +105,197 @@ static void* read_memory(vm_address_t address, size_t size) {
     if (region == NULL) {
         int result = map_new_region(address);
         if (result != 0) {
-            fprintf(stderr, "无法映射内存区域,错误代码:%d\n", result);
+            fprintf(stderr, "无法映射内存区域，错误代码：%d\n", result);
             return NULL;
         }
         region = find_cached_region(address);
     }
 
     if (address < region->base_address || address >= region->base_address + region->mapped_size - size) {
-        fprintf(stderr, "错误:地址 0x%llx 超出映射范围 (0x%llx - 0x%llx)\n", 
+        fprintf(stderr, "错误：地址 0x%llx 超出映射范围 (0x%llx - 0x%llx)\n", 
                 (unsigned long long)address, 
                 (unsigned long long)region->base_address, 
                 (unsigned long long)(region->base_address + region->mapped_size));
         return NULL;
     }
 
-    return (void*)((char*)region->mapped_memory + (address - region->base_address));
+    vm_address_t offset = address - region->base_address;
+    return (void *)((char *)region->mapped_memory + offset);
 }
 
-int initialize_memory_module(pid_t pid) {
-    kern_return_t kr;
-    target_pid = pid;
-    kr = task_for_pid(mach_task_self(), target_pid, &target_task);
+int32_t 读内存i32(vm_address_t address) {
+    void* ptr = read_memory(address, sizeof(int32_t));
+    return ptr ? *(int32_t*)ptr : 0;
+}
+
+int64_t 读内存i64(vm_address_t address) {
+    void* ptr = read_memory(address, sizeof(int64_t));
+    return ptr ? *(int64_t*)ptr : 0;
+}
+
+float 读内存float(vm_address_t address) {
+    void* ptr = read_memory(address, sizeof(float));
+    return ptr ? *(float*)ptr : 0.0f;
+}
+
+double 读内存double(vm_address_t address) {
+    void* ptr = read_memory(address, sizeof(double));
+    return ptr ? *(double*)ptr : 0.0;
+}
+
+static void* async_read_memory(vm_address_t address, size_t size) {
+    static char buffer[sizeof(double)];  // 足够大的缓冲区来存储任何类型
+    memset(buffer, 0, sizeof(buffer));
+
+    pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    int completed = 0;
+
+    pthread_mutex_lock(&requests_mutex);
+    if (num_pending_requests >= MAX_PENDING_REQUESTS) {
+        pthread_mutex_unlock(&requests_mutex);
+        fprintf(stderr, "等待请求队列已满\n");
+        return NULL;
+    }
+
+    pending_requests[num_pending_requests].address = address;
+    pending_requests[num_pending_requests].result = buffer;
+    pending_requests[num_pending_requests].cond = &cond;
+    pending_requests[num_pending_requests].mutex = &mutex;
+    pending_requests[num_pending_requests].completed = &completed;
+    pending_requests[num_pending_requests].is_write = 0;
+    num_pending_requests++;
+
+    pthread_cond_signal(&request_cond);
+    pthread_mutex_unlock(&requests_mutex);
+
+    pthread_mutex_lock(&mutex);
+    while (!completed) {
+        pthread_cond_wait(&cond, &mutex);
+    }
+    pthread_mutex_unlock(&mutex);
+
+    return buffer;
+}
+
+int32_t 异步读内存i32(vm_address_t address) {
+    void* ptr = async_read_memory(address, sizeof(int32_t));
+    return ptr ? *(int32_t*)ptr : 0;
+}
+
+int64_t 异步读内存i64(vm_address_t address) {
+    void* ptr = async_read_memory(address, sizeof(int64_t));
+    return ptr ? *(int64_t*)ptr : 0;
+}
+
+float 异步读内存float(vm_address_t address) {
+    void* ptr = async_read_memory(address, sizeof(float));
+    return ptr ? *(float*)ptr : 0.0f;
+}
+
+double 异步读内存double(vm_address_t address) {
+    void* ptr = async_read_memory(address, sizeof(double));
+    return ptr ? *(double*)ptr : 0.0;
+}
+
+static int write_memory(vm_address_t address, const void* value, size_t size) {
+    MemoryRegion* region = find_cached_region(address);
+    if (region == NULL) {
+        int result = map_new_region(address);
+        if (result != 0) {
+            fprintf(stderr, "无法映射内存区域，错误代码：%d\n", result);
+            return -1;
+        }
+        region = find_cached_region(address);
+    }
+
+    if (address < region->base_address || address >= region->base_address + region->mapped_size - size) {
+        fprintf(stderr, "错误：地址 0x%llx 超出映射范围 (0x%llx - 0x%llx)\n", 
+                (unsigned long long)address, 
+                (unsigned long long)region->base_address, 
+                (unsigned long long)(region->base_address + region->mapped_size));
+        return -1;
+    }
+
+    vm_address_t offset = address - region->base_address;
+    memcpy((char *)region->mapped_memory + offset, value, size);
+
+    kern_return_t kr = vm_write(target_task, address, (vm_offset_t)value, size);
     if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "无法获取目标进程的任务端口,错误代码:%d\n", kr);
+        fprintf(stderr, "vm_write 失败: %s\n", mach_error_string(kr));
         return -1;
     }
-
-    cached_regions = malloc(max_cached_regions * sizeof(MemoryRegion));
-    if (cached_regions == NULL) {
-        fprintf(stderr, "无法分配内存\n");
-        return -1;
-    }
-
-    // 初始化其他必要的资源...
 
     return 0;
 }
 
-void cleanup_memory_module() {
-    for (int i = 0; i < num_cached_regions; i++) {
-        munmap(cached_regions[i].mapped_memory, cached_regions[i].mapped_size);
-    }
-    free(cached_regions);
-    // 清理其他资源...
+int 写内存i32(vm_address_t address, int32_t value) {
+    return write_memory(address, &value, sizeof(int32_t));
 }
 
-int32_t 异步读内存i32(vm_address_t address) {
-    void* data = read_memory(address, sizeof(int32_t));
-    if (data == NULL) {
-        return 0;
-    }
-    return *(int32_t*)data;
+int 写内存i64(vm_address_t address, int64_t value) {
+    return write_memory(address, &value, sizeof(int64_t));
 }
 
-int64_t 异步读内存i64(vm_address_t address) {
-    void* data = read_memory(address, sizeof(int64_t));
-    if (data == NULL) {
-        return 0;
-    }
-    return *(int64_t*)data;
+int 写内存float(vm_address_t address, float value) {
+    return write_memory(address, &value, sizeof(float));
 }
 
-float 异步读内存float(vm_address_t address) {
-    void* data = read_memory(address, sizeof(float));
-    if (data == NULL) {
-        return 0.0f;
-    }
-    return *(float*)data;
+int 写内存double(vm_address_t address, double value) {
+    return write_memory(address, &value, sizeof(double));
 }
 
-double 异步读内存double(vm_address_t address) {
-    void* data = read_memory(address, sizeof(double));
-    if (data == NULL) {
-        return 0.0;
+static int async_write_memory(vm_address_t address, const void* value, size_t size) {
+    int result = -1;
+    pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    int completed = 0;
+
+    pthread_mutex_lock(&requests_mutex);
+    if (num_pending_requests >= MAX_PENDING_REQUESTS) {
+        pthread_mutex_unlock(&requests_mutex);
+        fprintf(stderr, "等待请求队列已满\n");
+        return -1;
     }
-    return *(double*)data;
+
+    pending_requests[num_pending_requests].address = address;
+    pending_requests[num_pending_requests].result = &result;
+    pending_requests[num_pending_requests].cond = &cond;
+    pending_requests[num_pending_requests].mutex = &mutex;
+    pending_requests[num_pending_requests].completed = &completed;
+    pending_requests[num_pending_requests].is_write = 1;
+    memcpy(&pending_requests[num_pending_requests].write_value, value, size);
+    num_pending_requests++;
+
+    pthread_cond_signal(&request_cond);
+    pthread_mutex_unlock(&requests_mutex);
+
+    pthread_mutex_lock(&mutex);
+    while (!completed) {
+        pthread_cond_wait(&cond, &mutex);
+    }
+    pthread_mutex_unlock(&mutex);
+
+    return result;
 }
 
 int 异步写内存i32(vm_address_t address, int32_t value) {
-    kern_return_t kr;
-    kr = vm_write(target_task, address, (vm_offset_t)&value, sizeof(int32_t));
-    return (kr == KERN_SUCCESS) ? 0 : -1;
+    return async_write_memory(address, &value, sizeof(int32_t));
 }
 
 int 异步写内存i64(vm_address_t address, int64_t value) {
-    kern_return_t kr;
-    kr = vm_write(target_task, address, (vm_offset_t)&value, sizeof(int64_t));
-    return (kr == KERN_SUCCESS) ? 0 : -1;
+    return async_write_memory(address, &value, sizeof(int64_t));
 }
 
 int 异步写内存float(vm_address_t address, float value) {
-    kern_return_t kr;
-    kr = vm_write(target_task, address, (vm_offset_t)&value, sizeof(float));
-    return (kr == KERN_SUCCESS) ? 0 : -1;
+    return async_write_memory(address, &value, sizeof(float));
 }
 
 int 异步写内存double(vm_address_t address, double value) {
-    kern_return_t kr;
-    kr = vm_write(target_task, address, (vm_offset_t)&value, sizeof(double));
-    return (kr == KERN_SUCCESS) ? 0 : -1;
+    return async_write_memory(address, &value, sizeof(double));
 }
 
-int 获取内存区域信息(MemoryRegion* regions, int max_regions) {
-    vm_address_t address = 0;
-    vm_size_t size;
-    vm_region_basic_info_data_64_t info;
-    mach_msg_type_number_t info_count;
-    vm_region_flavor_t flavor = VM_REGION_BASIC_INFO_64;
-    mach_port_t object_name;
-    int count = 0;
-
-    while (count < max_regions) {
-        info_count = VM_REGION_BASIC_INFO_COUNT_64;
-        kern_return_t kr = vm_region_64(target_task, &address, &size, flavor,
-                                        (vm_region_info_t)&info, &info_count, &object_name);
-        if (kr != KERN_SUCCESS) {
-            break;
-        }
-
-        regions[count].base_address = address;
-        regions[count].mapped_size = size;
-        regions[count].access_count = 0;
-        regions[count].last_access = 0;
-        count++;
-
-        address += size;
-    }
-
-    return count;
-}
-
-int 注入动态库(const char* dylib_path) {
-    kern_return_t kr;
-    mach_vm_address_t remote_string_addr = 0;
-    mach_vm_size_t remote_string_size = strlen(dylib_path) + 1;
-
-    // 在远程进程中分配内存
-    kr = mach_vm_allocate(target_task, &remote_string_addr, remote_string_size, VM_FLAGS_ANYWHERE);
-    if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "无法在远程进程中分配内存\n");
-        return -1;
-    }
-
-    // 将动态库路径写入远程进程内存
-    kr = mach_vm_write(target_task, remote_string_addr, (vm_offset_t)dylib_path, remote_string_size);
-    if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "无法写入远程进程内存\n");
-        mach_vm_deallocate(target_task, remote_string_addr, remote_string_size);
-        return -1;
-    }
-
-    // 获取 dlopen 函数的地址
-    void* dlopen_addr = dlsym(RTLD_DEFAULT, "dlopen");
-    if (dlopen_addr == NULL) {
-        fprintf(stderr, "无法获取 dlopen 函数地址\n");
-        mach_vm_deallocate(target_task, remote_string_addr, remote_string_size);
-        return -1;
-    }
-
-    // 创建远程线程执行 dlopen
-    thread_act_t remote_thread;
-    arm_thread_state64_t thread_state;
-    mach_msg_type_number_t thread_state_count = ARM_THREAD_STATE64_COUNT;
-
-    __builtin_memset(&thread_state, 0, sizeof(thread_state));
-    thread_state.__pc = (uint64_t)dlopen_addr;
-    thread_state.__x[0] = remote_string_addr;
-    thread_state.__x[1] = RTLD_NOW;
-
-    kr = thread_create_running(target_task, ARM_THREAD_STATE64, (thread_state_t)&thread_state, thread_state_count, &remote_thread);
-    if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "无法创建远程线程\n");
-        mach_vm_deallocate(target_task, remote_string_addr, remote_string_size);
-        return -1;
-    }
-
-    // 等待远程线程完成
-    mach_msg_type_number_t new_thread_state_count = ARM_THREAD_STATE64_COUNT;
-    kr = thread_get_state(remote_thread, ARM_THREAD_STATE64, (thread_state_t)&thread_state, &new_thread_state_count);
-    if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "无法获取线程状态\n");
-        } else {
-        // 检查返回值
-        uint64_t return_value = thread_state.__x[0];
-        if (return_value == 0) {
-            fprintf(stderr, "动态库注入失败\n");
-        } else {
-            printf("动态库成功注入\n");
-        }
-    }
-
-    // 清理资源
-    kr = thread_terminate(remote_thread);
-    if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "无法终止远程线程\n");
-    }
-
-    mach_vm_deallocate(target_task, remote_string_addr, remote_string_size);
-
-    return (thread_state.__x[0] != 0) ? 0 : -1;
-}
-
-static void* mapper_thread_function(void* arg) {
+static void* mapper_thread_func(void* arg) {
     while (1) {
         pthread_mutex_lock(&requests_mutex);
         while (num_pending_requests == 0) {
@@ -317,49 +305,47 @@ static void* mapper_thread_function(void* arg) {
         MemoryRequest request = pending_requests[0];
         memmove(&pending_requests[0], &pending_requests[1], (num_pending_requests - 1) * sizeof(MemoryRequest));
         num_pending_requests--;
-
         pthread_mutex_unlock(&requests_mutex);
 
-        void* data = read_memory(request.address, request.size);
-        if (data != NULL) {
-            memcpy(request.buffer, data, request.size);
-            request.completed = 1;
+        if (request.is_write) {
+            int result = write_memory(request.address, request.write_value, sizeof(request.write_value));
+            *(int*)request.result = result;
         } else {
-            request.completed = -1;
+            void* result = read_memory(request.address, sizeof(double));
+            if (result) {
+                memcpy(request.result, result, sizeof(double));
+            } else {
+                memset(request.result, 0, sizeof(double));
+            }
         }
+
+        pthread_mutex_lock(request.mutex);
+        *request.completed = 1;
+        pthread_cond_signal(request.cond);
+        pthread_mutex_unlock(request.mutex);
     }
     return NULL;
 }
 
-static int queue_memory_request(vm_address_t address, size_t size, void* buffer) {
-    pthread_mutex_lock(&requests_mutex);
-    
-    if (num_pending_requests >= MAX_PENDING_REQUESTS) {
-        pthread_mutex_unlock(&requests_mutex);
+int initialize_memory_module(pid_t pid) {
+    kern_return_t kr;
+    target_pid = pid;
+
+    kr = task_for_pid(mach_task_self(), target_pid, &target_task);
+    if (kr != KERN_SUCCESS) {
+        fprintf(stderr, "task_for_pid 失败: %s\n", mach_error_string(kr));
         return -1;
     }
 
-    MemoryRequest* request = &pending_requests[num_pending_requests];
-    request->address = address;
-    request->size = size;
-    request->buffer = buffer;
-    request->completed = 0;
+    cached_regions = malloc(max_cached_regions * sizeof(MemoryRegion));
+    if (cached_regions == NULL) {
+        fprintf(stderr, "内存分配失败\n");
+        return -1;
+    }
 
-    num_pending_requests++;
-    pthread_cond_signal(&request_cond);
-
-    pthread_mutex_unlock(&requests_mutex);
-    return 0;
-}
-
-// 这里可以添加其他辅助函数,如错误处理、日志记录等
-
-// 在 initialize_memory_module 函数中添加以下代码来创建mapper线程:
-int initialize_memory_module(pid_t pid) {
-    // ... (之前的代码)
-
-    if (pthread_create(&mapper_thread, NULL, mapper_thread_function, NULL) != 0) {
-        fprintf(stderr, "无法创建mapper线程\n");
+    int result = pthread_create(&mapper_thread, NULL, mapper_thread_func, NULL);
+    if (result != 0) {
+        fprintf(stderr, "创建映射线程失败: %s\n", strerror(result));
         free(cached_regions);
         return -1;
     }
@@ -367,14 +353,17 @@ int initialize_memory_module(pid_t pid) {
     return 0;
 }
 
-// 在 cleanup_memory_module 函数中添加以下代码来清理mapper线程:
-void cleanup_memory_module() {
-    // ... (之前的代码)
-
+void cleanup_memory_module(void) {
     pthread_cancel(mapper_thread);
     pthread_join(mapper_thread, NULL);
 
-    pthread_mutex_destroy(&regions_mutex);
-    pthread_mutex_destroy(&requests_mutex);
-    pthread_cond_destroy(&request_cond);
+    for (int i = 0; i < num_cached_regions; i++) {
+        munmap(cached_regions[i].mapped_memory, cached_regions[i].mapped_size);
+    }
+    free(cached_regions);
+
+    mach_port_deallocate(mach_task_self(), target_task);
 }
+
+
+
