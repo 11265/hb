@@ -1,3 +1,4 @@
+#include <sys/types.h>  // 包含 pid_t
 #include <mach/mach.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -37,9 +38,9 @@ static void cleanup_task_port() {
 static kern_return_t read_memory_from_task(mach_vm_address_t address, size_t size, void **buffer) {
     mach_vm_size_t data_size = size;
     vm_offset_t read_buffer;
-    kern_return_t kret = mach_vm_read(global_task_port, address, size, &read_buffer, &data_size);
+    kern_return_t kret = mach_vm_read_overwrite(global_task_port, address, size, &read_buffer, &data_size);
     if (kret != KERN_SUCCESS) {
-        printf("mach_vm_read 失败: %s\n", mach_error_string(kret));
+        printf("mach_vm_read_overwrite 失败: %s\n", mach_error_string(kret));
         return kret;
     }
 
@@ -93,7 +94,7 @@ int read_int64(mach_vm_address_t address, int64_t *value) {
 // 主函数
 int c_main() {
     printf("目标进程 PID: %d\n", TARGET_PID);
-    printf("目标内存地址: 0x%llx\n", TARGET_ADDRESS);
+    printf("目标内存地址: 0x%lx\n", (unsigned long)TARGET_ADDRESS);
 
     // 初始化任务端口
     if (initialize_task_port(TARGET_PID) != KERN_SUCCESS) {
