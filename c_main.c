@@ -6,7 +6,7 @@
 
 #define TARGET_PROCESS_NAME "pvz"
 
-int main() {
+int c_main() {
     pid_t target_pid = get_pid_by_name(TARGET_PROCESS_NAME);
     if (target_pid == -1) {
         printf("无法找到目标进程: %s\n", TARGET_PROCESS_NAME);
