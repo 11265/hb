@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <mach/mach.h>
+#include <mach/mach_error.h>
 
 int read_process_memory() {
     pid_t target_pid;
     vm_address_t target_address;
-    vm_size_t size_to_read = 16;  // 读取16字节
+    vm_size_t size_to_read = 4;  // 减小到4字节
 
     printf("输入目标进程的 PID: ");
     scanf("%d", &target_pid);
@@ -17,7 +18,7 @@ int read_process_memory() {
     mach_port_t task;
     kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &task);
     if (kr != KERN_SUCCESS) {
-        printf("无法获取目标进程的任务端口。错误码: %d\n", kr);
+        printf("无法获取目标进程的任务端口。错误码: %d (%s)\n", kr, mach_error_string(kr));
         return 1;
     }
 
@@ -26,7 +27,8 @@ int read_process_memory() {
     mach_msg_type_number_t data_size = size_to_read;
     kr = vm_read_overwrite(task, target_address, size_to_read, (vm_address_t)data, &data_size);
     if (kr != KERN_SUCCESS) {
-        printf("无法读取内存。错误码: %d\n", kr);
+        printf("无法读取内存。错误码: %d (%s)\n", kr, mach_error_string(kr));
+        mach_port_deallocate(mach_task_self(), task);
         return 1;
     }
 
@@ -35,7 +37,6 @@ int read_process_memory() {
     unsigned char *buffer = (unsigned char *)data;
     for (int i = 0; i < data_size; i++) {
         printf("%02X ", buffer[i]);
-        if ((i + 1) % 8 == 0) printf("\n");
     }
     printf("\n");
 
