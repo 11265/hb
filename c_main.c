@@ -14,6 +14,12 @@ extern task_t target_task;  // 声明外部变量
 // 声明读内存函数
 extern int 读内存(vm_address_t address, void* buffer, size_t size);
 
+// 添加这些函数声明
+extern int64_t 异步读内存i64(vm_address_t address);
+extern int32_t 异步读内存i32(vm_address_t address);
+extern int initialize_memory_module(pid_t pid);
+extern void cleanup_memory_module(void);
+
 // 新增：查找模块基地址的函数
 vm_address_t find_module_base(const char* module_name) {
     task_dyld_info_data_t task_dyld_info;
