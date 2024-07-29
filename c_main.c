@@ -13,7 +13,7 @@ int c_main(void) {
     }
 
     // 示例：读取某个地址的值（这里使用 0x102DD2404 作为示例）
-    vm_address_t target_address = 0x102DD2404;
+    vm_address_t target_address = 0x104b94fc0;
     int32_t int_value = 读内存i32(target_address);
     printf("地址 0x%llx 处读取的 int32_t 值: %d\n", (unsigned long long)target_address, int_value);
 
