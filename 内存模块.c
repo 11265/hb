@@ -7,6 +7,8 @@
 #include <pthread.h>
 
 #define ALIGN4(size) (((size) + 3) & ~3)
+#define PAGE_SIZE 4096
+#define PAGE_MASK (~(PAGE_SIZE - 1))
 
 typedef struct {
     pthread_t thread;
@@ -28,43 +30,24 @@ static MemoryRequest pending_requests[MAX_PENDING_REQUESTS];
 static int num_pending_requests = 0;
 static int stop_threads = 0;
 
-static MemoryRegion* find_cached_region(vm_address_t address) {
+static MemoryRegion* get_or_create_page(vm_address_t address) {
+    vm_address_t page_address = address & PAGE_MASK;
+    
     pthread_mutex_lock(&regions_mutex);
+    
+    // 查找现有的页面
     for (int i = 0; i < num_cached_regions; i++) {
-        if (address >= cached_regions[i].base_address && 
-            address < cached_regions[i].base_address + cached_regions[i].mapped_size) {
+        if (cached_regions[i].base_address == page_address) {
             cached_regions[i].access_count++;
             cached_regions[i].last_access = time(NULL);
             pthread_mutex_unlock(&regions_mutex);
             return &cached_regions[i];
         }
     }
-    pthread_mutex_unlock(&regions_mutex);
-    return NULL;
-}
-
-static void adjust_cache_size() {
-    if (num_cached_regions == max_cached_regions) {
-        if (max_cached_regions < MAX_CACHED_REGIONS) {
-            max_cached_regions++;
-            cached_regions = realloc(cached_regions, max_cached_regions * sizeof(MemoryRegion));
-        }
-    } else if (num_cached_regions < max_cached_regions / 2 && max_cached_regions > MIN_CACHED_REGIONS) {
-        max_cached_regions--;
-        cached_regions = realloc(cached_regions, max_cached_regions * sizeof(MemoryRegion));
-    }
-}
-
-static int map_new_region(vm_address_t address) {
-    kern_return_t kr;
-    vm_address_t region_start = address & ~(REGION_SIZE - 1);
-    vm_size_t size = REGION_SIZE;
-    mach_vm_size_t bytes_read;
-
-    pthread_mutex_lock(&regions_mutex);
-    adjust_cache_size();
     
+    // 如果没有找到，创建新的页面
     if (num_cached_regions >= max_cached_regions) {
+        // 如果缓存已满，移除最少使用的页面
         int least_used_index = 0;
         uint32_t least_used_count = UINT32_MAX;
         time_t oldest_access = time(NULL);
@@ -84,76 +67,153 @@ static int map_new_region(vm_address_t address) {
                 (num_cached_regions - least_used_index - 1) * sizeof(MemoryRegion));
         num_cached_regions--;
     }
-
-    vm_size_t aligned_size = ALIGN4(size);
-    void *mapped_memory = mmap(NULL, aligned_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    
+    // 映射新页面
+    void* mapped_memory = mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (mapped_memory == MAP_FAILED) {
         pthread_mutex_unlock(&regions_mutex);
-        return -1;
+        return NULL;
     }
-
-    kr = vm_read_overwrite(target_task, region_start, size, (vm_address_t)mapped_memory, &bytes_read);
-    if (kr != KERN_SUCCESS || bytes_read != size) {
-        munmap(mapped_memory, aligned_size);
+    
+    mach_vm_size_t bytes_read;
+    kern_return_t kr = vm_read_overwrite(target_task, page_address, PAGE_SIZE, (vm_address_t)mapped_memory, &bytes_read);
+    if (kr != KERN_SUCCESS || bytes_read != PAGE_SIZE) {
+        munmap(mapped_memory, PAGE_SIZE);
         pthread_mutex_unlock(&regions_mutex);
-        return -1;
+        return NULL;
     }
-
-    cached_regions[num_cached_regions].base_address = region_start;
+    
+    cached_regions[num_cached_regions].base_address = page_address;
     cached_regions[num_cached_regions].mapped_memory = mapped_memory;
-    cached_regions[num_cached_regions].mapped_size = aligned_size;
+    cached_regions[num_cached_regions].mapped_size = PAGE_SIZE;
     cached_regions[num_cached_regions].access_count = 1;
     cached_regions[num_cached_regions].last_access = time(NULL);
+    
     num_cached_regions++;
-
+    
     pthread_mutex_unlock(&regions_mutex);
-    return 0;
+    return &cached_regions[num_cached_regions - 1];
 }
 
-static void* read_memory(vm_address_t address, size_t size) {
-    MemoryRegion* region = find_cached_region(address);
+void* 读任意地址(vm_address_t address, size_t size) {
+    MemoryRegion* region = get_or_create_page(address);
     if (!region) {
-        if (map_new_region(address) != 0) {
+        return NULL;
+    }
+    
+    size_t offset = address - region->base_address;
+    if (offset + size > PAGE_SIZE) {
+        // 如果读取跨越了页面边界，我们需要分配一个新的缓冲区
+        void* buffer = malloc(size);
+        if (!buffer) {
             return NULL;
         }
-        region = find_cached_region(address);
-        if (!region) {
+        
+        size_t first_part = PAGE_SIZE - offset;
+        memcpy(buffer, (char*)region->mapped_memory + offset, first_part);
+        
+        // 读取剩余部分
+        size_t remaining = size - first_part;
+        void* remaining_data = 读任意地址(address + first_part, remaining);
+        if (!remaining_data) {
+            free(buffer);
             return NULL;
         }
+        
+        memcpy((char*)buffer + first_part, remaining_data, remaining);
+        free(remaining_data);
+        
+        return buffer;
+    } else {
+        // 如果读取没有跨越页面边界，直接返回映射内存中的指针
+        return (char*)region->mapped_memory + offset;
     }
-    return (void*)((char*)region->mapped_memory + (address - region->base_address));
 }
 
-static int write_memory(vm_address_t address, const void* value, size_t size) {
-    MemoryRegion* region = find_cached_region(address);
+int 写任意地址(vm_address_t address, const void* data, size_t size) {
+    MemoryRegion* region = get_or_create_page(address);
     if (!region) {
-        if (map_new_region(address) != 0) {
-            return -1;
-        }
-        region = find_cached_region(address);
-        if (!region) {
-            return -1;
-        }
+        return -1;
     }
-    memcpy((char*)region->mapped_memory + (address - region->base_address), value, size);
-    return 0;
+    
+    size_t offset = address - region->base_address;
+    if (offset + size > PAGE_SIZE) {
+        // 如果写入跨越了页面边界，我们需要分段写入
+        size_t first_part = PAGE_SIZE - offset;
+        memcpy((char*)region->mapped_memory + offset, data, first_part);
+        
+        // 写入剩余部分
+        size_t remaining = size - first_part;
+        return 写任意地址(address + first_part, (char*)data + first_part, remaining);
+    } else {
+        // 如果写入没有跨越页面边界，直接写入映射内存
+        memcpy((char*)region->mapped_memory + offset, data, size);
+        return 0;
+    }
 }
 
-static size_t align_size(size_t size) {
-    return ALIGN4(size);
+int32_t 读内存i32(vm_address_t address) {
+    void* data = 读任意地址(address, sizeof(int32_t));
+    if (!data) {
+        return 0;
+    }
+    int32_t result = *(int32_t*)data;
+    if (data != (void*)((char*)get_or_create_page(address)->mapped_memory + (address & (PAGE_SIZE - 1)))) {
+        free(data);
+    }
+    return result;
 }
 
-static void* read_memory_aligned(vm_address_t address, size_t size) {
-    size_t aligned_size = align_size(size);
-    return read_memory(address, aligned_size);
+int64_t 读内存i64(vm_address_t address) {
+    void* data = 读任意地址(address, sizeof(int64_t));
+    if (!data) {
+        return 0;
+    }
+    int64_t result = *(int64_t*)data;
+    if (data != (void*)((char*)get_or_create_page(address)->mapped_memory + (address & (PAGE_SIZE - 1)))) {
+        free(data);
+    }
+    return result;
 }
 
-static int write_memory_aligned(vm_address_t address, const void* value, size_t size) {
-    size_t aligned_size = align_size(size);
-    char aligned_buffer[aligned_size];
-    memset(aligned_buffer, 0, aligned_size);
-    memcpy(aligned_buffer, value, size);
-    return write_memory(address, aligned_buffer, aligned_size);
+float 读内存f32(vm_address_t address) {
+    void* data = 读任意地址(address, sizeof(float));
+    if (!data) {
+        return 0.0f;
+    }
+    float result = *(float*)data;
+    if (data != (void*)((char*)get_or_create_page(address)->mapped_memory + (address & (PAGE_SIZE - 1)))) {
+        free(data);
+    }
+    return result;
+}
+
+double 读内存f64(vm_address_t address) {
+    void* data = 读任意地址(address, sizeof(double));
+    if (!data) {
+        return 0.0;
+    }
+    double result = *(double*)data;
+    if (data != (void*)((char*)get_or_create_page(address)->mapped_memory + (address & (PAGE_SIZE - 1)))) {
+        free(data);
+    }
+    return result;
+}
+
+int 写内存i32(vm_address_t address, int32_t value) {
+    return 写任意地址(address, &value, sizeof(int32_t));
+}
+
+int 写内存i64(vm_address_t address, int64_t value) {
+    return 写任意地址(address, &value, sizeof(int64_t));
+}
+
+int 写内存f32(vm_address_t address, float value) {
+    return 写任意地址(address, &value, sizeof(float));
+}
+
+int 写内存f64(vm_address_t address, double value) {
+    return 写任意地址(address, &value, sizeof(double));
 }
 
 static void* mapper_thread_func(void* arg) {
@@ -180,109 +240,60 @@ static void* mapper_thread_func(void* arg) {
 
         if (num_pending_requests > 0) {
             if (request.is_write) {
-                int result = write_memory_aligned(request.address, request.write_value, sizeof(request.write_value));
+                int result = 写任意地址(request.address, &request.write_value, sizeof(request.write_value));
                 *(int*)request.result = result;
             } else {
-                void* result = read_memory_aligned(request.address, sizeof(double));
+                void* result = 读任意地址(request.address, request.size);
                 if (result) {
-                    memcpy(request.result, result, sizeof(double));
+                    memcpy(request.result, result, request.size);
+                    if (result != (void*)((char*)get_or_create_page(request.address)->mapped_memory + (request.address & (PAGE_SIZE - 1)))) {
+                        free(result);
+                    }
                 } else {
-                    memset(request.result, 0, sizeof(double));
+                    memset(request.result, 0, request.size);
                 }
             }
-
-            pthread_mutex_lock(request.mutex);
-            *request.completed = 1;
-            pthread_cond_signal(request.cond);
-            pthread_mutex_unlock(request.mutex);
         }
     }
     
-    printf("Thread %d exiting\n", info->id);
     return NULL;
 }
 
-int initialize_memory_module(pid_t pid) {
+int 初始化内存模块(pid_t pid) {
     target_pid = pid;
     kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &target_task);
     if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "无法获取目标进程的任务端口\n");
         return -1;
     }
-
+    
     cached_regions = malloc(max_cached_regions * sizeof(MemoryRegion));
     if (!cached_regions) {
-        fprintf(stderr, "无法分配缓存区域内存\n");
         return -1;
     }
-
+    
     for (int i = 0; i < NUM_THREADS; i++) {
         thread_pool[i].id = i;
-        int result = pthread_create(&thread_pool[i].thread, NULL, mapper_thread_func, &thread_pool[i]);
-        if (result != 0) {
-            fprintf(stderr, "创建线程 %d 失败: %s\n", i, strerror(result));
-            for (int j = 0; j < i; j++) {
-                pthread_cancel(thread_pool[j].thread);
-                pthread_join(thread_pool[j].thread, NULL);
-            }
-            free(cached_regions);
-            return -1;
-        }
+        pthread_create(&thread_pool[i].thread, NULL, mapper_thread_func, &thread_pool[i]);
     }
-
+    
     return 0;
 }
 
-void cleanup_memory_module(void) {
-    pthread_mutex_lock(&requests_mutex);
+void 关闭内存模块() {
     stop_threads = 1;
     pthread_cond_broadcast(&request_cond);
-    pthread_mutex_unlock(&requests_mutex);
-
+    
     for (int i = 0; i < NUM_THREADS; i++) {
         pthread_join(thread_pool[i].thread, NULL);
     }
-
+    
     for (int i = 0; i < num_cached_regions; i++) {
         munmap(cached_regions[i].mapped_memory, cached_regions[i].mapped_size);
     }
+    
     free(cached_regions);
-
+    cached_regions = NULL;
+    num_cached_regions = 0;
+    
     mach_port_deallocate(mach_task_self(), target_task);
-}
-
-int32_t 读内存i32(vm_address_t address) {
-    void* ptr = read_memory_aligned(address, sizeof(int32_t));
-    return ptr ? *(int32_t*)ptr : 0;
-}
-
-int64_t 读内存i64(vm_address_t address) {
-    void* ptr = read_memory_aligned(address, sizeof(int64_t));
-    return ptr ? *(int64_t*)ptr : 0;
-}
-
-float 读内存f32(vm_address_t address) {
-    void* ptr = read_memory_aligned(address, sizeof(float));
-    return ptr ? *(float*)ptr : 0.0f;
-}
-
-double 读内存f64(vm_address_t address) {
-    void* ptr = read_memory_aligned(address, sizeof(double));
-    return ptr ? *(double*)ptr : 0.0;
-}
-
-int 写内存i32(vm_address_t address, int32_t value) {
-    return write_memory_aligned(address, &value, sizeof(int32_t));
-}
-
-int 写内存i64(vm_address_t address, int64_t value) {
-    return write_memory_aligned(address, &value, sizeof(int64_t));
-}
-
-int 写内存f32(vm_address_t address, float value) {
-    return write_memory_aligned(address, &value, sizeof(float));
-}
-
-int 写内存f64(vm_address_t address, double value) {
-    return write_memory_aligned(address, &value, sizeof(double));
 }
