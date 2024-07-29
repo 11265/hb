@@ -11,7 +11,7 @@ static vm_address_t base_address = 0;
 int initialize_memory_access(pid_t pid, vm_address_t address, vm_size_t size) {
     kern_return_t kr;
     task_t target_task;
-    mach_vm_size_t bytes_read;
+    mach_vm_size_t bytes_read; // 改为 mach_vm_size_t
 
     printf("正在获取目标进程 (PID: %d) 的 task...\n", pid);
     kr = task_for_pid(mach_task_self(), pid, &target_task);
@@ -45,7 +45,7 @@ int initialize_memory_access(pid_t pid, vm_address_t address, vm_size_t size) {
     
     printf("正在读取目标进程内存...\n");
     while (size > 0) {
-        kr = vm_read_overwrite(target_task, address, size, (vm_address_t)mapped_memory, &bytes_read);
+        kr = vm_read_overwrite(target_task, address, size, (vm_address_t)mapped_memory, (vm_size_t *)&bytes_read);
         if (kr == KERN_SUCCESS) {
             break;
         } else if (kr != KERN_INVALID_ADDRESS) {
