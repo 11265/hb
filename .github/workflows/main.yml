@@ -1,4 +1,4 @@
-name: iOS ARM64 Assembly Build
+name: iOS ARM64 Assembly and C Build
 
 on:
   push:
@@ -23,13 +23,17 @@ jobs:
         echo "SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)" >> $GITHUB_ENV
         echo "$(xcrun --sdk iphoneos -f clang)" >> $GITHUB_PATH
     
-    - name: Assemble
+    - name: Compile Assembly
       run: |
-        xcrun --sdk iphoneos clang -arch arm64 -c memory_read.s -o memory_read.o -mios-version-min=12.0
+        xcrun --sdk iphoneos clang -arch arm64 -c main.s -o main.o -mios-version-min=12.0
+
+    - name: Compile C
+      run: |
+        xcrun --sdk iphoneos clang -arch arm64 -c memory_read.c -o memory_read.o -mios-version-min=12.0
 
     - name: Link
       run: |
-        xcrun --sdk iphoneos clang -arch arm64 -isysroot $SDKROOT -mios-version-min=12.0 -o memory_read memory_read.o -framework Foundation -framework CoreFoundation
+        xcrun --sdk iphoneos clang -arch arm64 -isysroot $SDKROOT -mios-version-min=12.0 -o memory_read main.o memory_read.o -framework Foundation -framework CoreFoundation
     
     - name: Upload artifact
       uses: actions/upload-artifact@v2
