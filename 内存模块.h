@@ -14,8 +14,8 @@
 #include <mach/mach.h>
 #include <sys/types.h>
 
-int initialize_task_port(pid_t pid);
-void cleanup_task_port();
+int initialize_task_port(pid_t pid);//获取任务端口
+void cleanup_task_port();			//释放任务端口
 
 // 读取函数
 int32_t 读内存i32(mach_vm_address_t address);
