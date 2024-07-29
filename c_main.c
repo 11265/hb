@@ -12,6 +12,10 @@ static bool is_task_port_initialized = false;
 
 // 函数：初始化全局任务端口
 static kern_return_t initialize_task_port(pid_t pid) {
+    if (is_task_port_initialized) {
+        return KERN_SUCCESS; // 已经初始化过
+    }
+
     kern_return_t kret = task_for_pid(mach_task_self(), pid, &global_task_port);
     if (kret != KERN_SUCCESS) {
         printf("task_for_pid 失败: %s\n", mach_error_string(kret));
@@ -19,6 +23,14 @@ static kern_return_t initialize_task_port(pid_t pid) {
     }
     is_task_port_initialized = true;
     return KERN_SUCCESS;
+}
+
+// 函数：释放全局任务端口
+static void cleanup_task_port() {
+    if (is_task_port_initialized) {
+        mach_port_deallocate(mach_task_self(), global_task_port);
+        is_task_port_initialized = false;
+    }
 }
 
 // 函数：从任务端口读取内存
@@ -35,34 +47,46 @@ static kern_return_t read_memory_from_task(mach_vm_address_t address, size_t siz
     return KERN_SUCCESS;
 }
 
-// 函数：复制内存
-static void copy_memory(void *source, void *destination, size_t size) {
-    memcpy(destination, source, size);
-}
-
 // 函数：释放资源
 static void release_resources(void *buffer, mach_vm_size_t size) {
     vm_deallocate(mach_task_self(), (vm_address_t)buffer, size);
 }
 
-// 函数：读取内存
-int read_memory(pid_t pid, mach_vm_address_t address, void *buffer, size_t size) {
+// 函数：读取 int32_t 数据
+int read_int32(mach_vm_address_t address, int32_t *value) {
     if (!is_task_port_initialized) {
-        kern_return_t kret = initialize_task_port(pid);
-        if (kret != KERN_SUCCESS) {
+        if (initialize_task_port(TARGET_PID) != KERN_SUCCESS) {
             return -1;
         }
     }
 
     void *read_buffer = NULL;
-    kern_return_t kret = read_memory_from_task(address, size, &read_buffer);
+    kern_return_t kret = read_memory_from_task(address, sizeof(int32_t), &read_buffer);
     if (kret != KERN_SUCCESS) {
         return -1;
     }
 
-    copy_memory(read_buffer, buffer, size);
-    release_resources(read_buffer, size);
+    memcpy(value, read_buffer, sizeof(int32_t));
+    release_resources(read_buffer, sizeof(int32_t));
+    return 0;
+}
 
+// 函数：读取 int64_t 数据
+int read_int64(mach_vm_address_t address, int64_t *value) {
+    if (!is_task_port_initialized) {
+        if (initialize_task_port(TARGET_PID) != KERN_SUCCESS) {
+            return -1;
+        }
+    }
+
+    void *read_buffer = NULL;
+    kern_return_t kret = read_memory_from_task(address, sizeof(int64_t), &read_buffer);
+    if (kret != KERN_SUCCESS) {
+        return -1;
+    }
+
+    memcpy(value, read_buffer, sizeof(int64_t));
+    release_resources(read_buffer, sizeof(int64_t));
     return 0;
 }
 
@@ -71,14 +95,55 @@ int c_main() {
     printf("目标进程 PID: %d\n", TARGET_PID);
     printf("目标内存地址: 0x%llx\n", TARGET_ADDRESS);
 
-    // 在这里调用读取内存的函数示例
-    char buffer[256];
-    if (read_memory(TARGET_PID, TARGET_ADDRESS, buffer, sizeof(buffer)) == 0) {
-        printf("内存读取成功\n");
-    } else {
-        printf("内存读取失败\n");
+    // 初始化任务端口
+    if (initialize_task_port(TARGET_PID) != KERN_SUCCESS) {
+        printf("初始化任务端口失败\n");
+        return -1;
     }
+
+    // 读取 int32_t 数据
+    int32_t int32_value;
+    if (read_int32(TARGET_ADDRESS, &int32_value) == 0) {
+        printf("读取 int32_t 数据成功: %d\n", int32_value);
+    } else {
+        printf("读取 int32_t 数据失败\n");
+    }
+
+    // 读取 int64_t 数据
+    int64_t int64_value;
+    if (read_int64(TARGET_ADDRESS, &int64_value) == 0) {
+        printf("读取 int64_t 数据成功: %lld\n", int64_value);
+    } else {
+        printf("读取 int64_t 数据失败\n");
+    }
+
+    // 释放全局任务端口
+    cleanup_task_port();
 
     printf("c_main 执行完成\n");
     return 0;
 }
+
+
+
+
+/*
+void 初始化数据()
+{
+	hWindows = FindWindow(NULL, L"地下城与勇士");
+	if (hWindows == NULL) {
+		MessageBox(NULL, TEXT("未找到该窗口！"), TEXT("错误"), MB_OK);
+		return;
+	}
+	ThreadID = GetWindowThreadProcessId(hWindows, &ProcessID);
+	if (ProcessID == NULL) {
+		MessageBox(NULL, TEXT("获取进程id失败！"), TEXT("错误"), MB_OK);
+		return;
+	}
+	进程ID = OpenProcess(PROCESS_ALL_ACCESS, FALSE, ProcessID);
+	if (进程ID == NULL) {
+		MessageBox(NULL, TEXT("获取进程id失败！"), TEXT("错误"), MB_OK);
+		return;
+	}
+} 
+*/
