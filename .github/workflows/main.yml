@@ -26,16 +26,16 @@ jobs:
 
     - name: Compile C files
       run: |
-        clang -c 内存模块.c -o 内存模块.o -target arm64-apple-ios -isysroot $SDKROOT
-        clang -c c_main.c -o c_main.o -target arm64-apple-ios -isysroot $SDKROOT
+        xcrun -sdk iphoneos clang -c 内存模块.c -o 内存模块.o -arch arm64 -mios-version-min=14.0
+        xcrun -sdk iphoneos clang -c c_main.c -o c_main.o -arch arm64 -mios-version-min=14.0
 
     - name: Assemble main.s
       run: |
-        as -arch arm64 -o main.o main.s
+        xcrun -sdk iphoneos clang -c main.s -o main.o -arch arm64 -mios-version-min=14.0
 
     - name: Link object files
       run: |
-        ld -o main main.o c_main.o 内存模块.o -lSystem -syslibroot $SDKROOT -arch arm64 -platform_version ios 14.0 14.0
+        xcrun -sdk iphoneos clang main.o c_main.o 内存模块.o -o main -arch arm64 -mios-version-min=14.0 -framework Foundation -framework CoreFoundation
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
