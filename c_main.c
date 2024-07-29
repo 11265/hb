@@ -4,7 +4,7 @@
 #include <mach/mach.h>
 
 #define TARGET_PID 23569
-#define MAP_SIZE 0x10000000  // 256MB
+#define MAP_SIZE 0x20000000  // 增加到 512MB
 
 int c_main(void) {
     kern_return_t kr;
@@ -43,7 +43,10 @@ int c_main(void) {
     }
     printf("内存访问初始化成功\n");
 
-    vm_address_t target_address = 0x104BB7C78;
+    // 计算相对于基地址的偏移
+    vm_address_t offset = 0x104bb7c78 - 0x102adc000;
+    vm_address_t target_address = base_address + offset;
+    
     printf("尝试读取地址 0x%llx\n", (unsigned long long)target_address);
     
     int32_t int_value = 读内存i32(target_address);
