@@ -25,30 +25,45 @@ int c_main(void) {
 
     // 获取目标进程的 task
     task_t target_task;
-    if (task_for_pid(mach_task_self(), target_pid, &target_task) != KERN_SUCCESS) {
-        fprintf(stderr, "无法获取目标进程的 task\n");
+    kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &target_task);
+    if (kr != KERN_SUCCESS) {
+        fprintf(stderr, "无法获取目标进程的 task，错误码: %d\n", kr);
         cleanup_memory_module();
         return -1;
     }
+    printf("成功获取目标进程的 task\n");
 
     // 查找 "pvz" 模块的基地址
     vm_address_t base_address = find_module_base(target_task, "pvz");
     if (base_address == 0) {
         fprintf(stderr, "未找到 pvz 模块\n");
+        mach_port_deallocate(mach_task_self(), target_task);
         cleanup_memory_module();
         return -1;
     }
     printf("pvz 模块基地址: 0x%llx\n", (unsigned long long)base_address);
 
     // 读取多层指针
-    int64_t final_address = read_multi_level_pointer(target_task, base_address, 2, 
-                                                     0x20A7AA0, 0x400);
-    
-    if (final_address != 0) {
-        int32_t value = 异步读内存i32(final_address);
-        printf("多层指针读取结果: 0x%llx, 值: %d (0x%x)\n", 
-               (unsigned long long)final_address, value, value);
+    int64_t addr1 = 读内存i64(base_address + 0x20A7AA0);
+    if (addr1 == 0) {
+        fprintf(stderr, "无法读取第一级指针\n");
+        mach_port_deallocate(mach_task_self(), target_task);
+        cleanup_memory_module();
+        return -1;
     }
+    printf("第一级指针值: 0x%llx\n", (unsigned long long)addr1);
+
+    int64_t final_address = 读内存i64(addr1 + 0x400);
+    if (final_address == 0) {
+        fprintf(stderr, "无法读取第二级指针\n");
+        mach_port_deallocate(mach_task_self(), target_task);
+        cleanup_memory_module();
+        return -1;
+    }
+    printf("最终地址: 0x%llx\n", (unsigned long long)final_address);
+
+    int32_t value = 读内存i32(final_address);
+    printf("读取的值: %d (0x%x)\n", value, value);
 
     // 释放目标进程的 task
     mach_port_deallocate(mach_task_self(), target_task);
