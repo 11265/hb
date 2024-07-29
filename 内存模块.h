@@ -20,8 +20,8 @@ void cleanup_task_port();
 // 读取函数
 int32_t 读内存i32(mach_vm_address_t address);
 int64_t 读内存i64(mach_vm_address_t address);
-float 读内存f32(mach_vm_address_t address);
-double 读内存f64(mach_vm_address_t address);
+float 	读内存f32(mach_vm_address_t address);
+double 	读内存f64(mach_vm_address_t address);
 
 // 写入函数
 void 写内存i32(mach_vm_address_t address, int32_t value);
