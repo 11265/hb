@@ -3,78 +3,95 @@
 #include <stdlib.h>
 #include <mach/mach_error.h>
 #include <stdbool.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <unistd.h>
 
-static mach_port_t global_task_port;
-static bool is_task_port_initialized = false;
+static void *mapped_memory = NULL;
+static size_t mapped_size = 0;
+static mach_vm_address_t base_address = 0;
 
-int initialize_task_port(pid_t pid) {
-    if (is_task_port_initialized) {
-        return KERN_SUCCESS;
+int initialize_memory_access(pid_t pid, mach_vm_address_t address, size_t size) {
+    char mem_file[64];
+    snprintf(mem_file, sizeof(mem_file), "/proc/%d/mem", pid);
+    
+    int fd = open(mem_file, O_RDWR);
+    if (fd == -1) {
+        perror("open failed");
+        return -1;
     }
 
-    kern_return_t kret = task_for_pid(mach_task_self(), pid, &global_task_port);
-    if (kret != KERN_SUCCESS) {
-        printf("task_for_pid 失败: %s\n", mach_error_string(kret));
-        return kret;
+    mapped_memory = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, address);
+    if (mapped_memory == MAP_FAILED) {
+        perror("mmap failed");
+        close(fd);
+        return -1;
     }
-    is_task_port_initialized = true;
-    return KERN_SUCCESS;
+
+    close(fd);
+    mapped_size = size;
+    base_address = address;
+    return 0;
 }
 
-void cleanup_task_port() {
-    if (is_task_port_initialized) {
-        mach_port_deallocate(mach_task_self(), global_task_port);
-        is_task_port_initialized = false;
+void cleanup_memory_access() {
+    if (mapped_memory != NULL) {
+        munmap(mapped_memory, mapped_size);
+        mapped_memory = NULL;
+        mapped_size = 0;
+        base_address = 0;
     }
 }
 
-static void read_memory_from_task(mach_vm_address_t address, size_t size, void *buffer) {
-    vm_size_t data_size = size;
-    vm_read_overwrite(global_task_port, address, size, (vm_address_t)buffer, &data_size);
-}
-
-static void write_memory_to_task(mach_vm_address_t address, size_t size, void *data) {
-    vm_write(global_task_port, address, (vm_offset_t)data, size);
+static void* get_mapped_address(mach_vm_address_t address) {
+    if (mapped_memory == NULL || address < base_address || address >= base_address + mapped_size) {
+        return NULL;
+    }
+    return (void*)((char*)mapped_memory + (address - base_address));
 }
 
 // 读取函数
 int32_t 读内存i32(mach_vm_address_t address) {
-    int32_t value = 0;
-    read_memory_from_task(address, sizeof(int32_t), &value);
-    return value;
+    void* mapped_addr = get_mapped_address(address);
+    if (mapped_addr == NULL) return 0;
+    return *(int32_t*)mapped_addr;
 }
 
 int64_t 读内存i64(mach_vm_address_t address) {
-    int64_t value = 0;
-    read_memory_from_task(address, sizeof(int64_t), &value);
-    return value;
+    void* mapped_addr = get_mapped_address(address);
+    if (mapped_addr == NULL) return 0;
+    return *(int64_t*)mapped_addr;
 }
 
 float 读内存f32(mach_vm_address_t address) {
-    float value = 0.0f;
-    read_memory_from_task(address, sizeof(float), &value);
-    return value;
+    void* mapped_addr = get_mapped_address(address);
+    if (mapped_addr == NULL) return 0.0f;
+    return *(float*)mapped_addr;
 }
 
 double 读内存f64(mach_vm_address_t address) {
-    double value = 0.0;
-    read_memory_from_task(address, sizeof(double), &value);
-    return value;
+    void* mapped_addr = get_mapped_address(address);
+    if (mapped_addr == NULL) return 0.0;
+    return *(double*)mapped_addr;
 }
 
 // 写入函数
 void 写内存i32(mach_vm_address_t address, int32_t value) {
-    write_memory_to_task(address, sizeof(int32_t), &value);
+    void* mapped_addr = get_mapped_address(address);
+    if (mapped_addr != NULL) *(int32_t*)mapped_addr = value;
 }
 
 void 写内存i64(mach_vm_address_t address, int64_t value) {
-    write_memory_to_task(address, sizeof(int64_t), &value);
+    void* mapped_addr = get_mapped_address(address);
+    if (mapped_addr != NULL) *(int64_t*)mapped_addr = value;
 }
 
 void 写内存f32(mach_vm_address_t address, float value) {
-    write_memory_to_task(address, sizeof(float), &value);
+    void* mapped_addr = get_mapped_address(address);
+    if (mapped_addr != NULL) *(float*)mapped_addr = value;
 }
 
 void 写内存f64(mach_vm_address_t address, double value) {
-    write_memory_to_task(address, sizeof(double), &value);
+    void* mapped_addr = get_mapped_address(address);
+    if (mapped_addr != NULL) *(double*)mapped_addr = value;
 }
