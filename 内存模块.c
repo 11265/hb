@@ -123,16 +123,49 @@ static void* read_memory(vm_address_t address, size_t size) {
     return (void *)((char *)region->mapped_memory + offset);
 }
 
+int 读内存(vm_address_t address, void* buffer, size_t size) {
+    MemoryRegion* region = find_cached_region(address);
+    if (region == NULL) {
+        int result = map_new_region(address);
+        if (result != 0) {
+            fprintf(stderr, "无法映射内存区域,错误代码:%d\n", result);
+            return -1;
+        }
+        region = find_cached_region(address);
+        if (region == NULL) {
+            fprintf(stderr, "映射后仍然找不到内存区域\n");
+            return -1;
+        }
+    }
+
+    vm_address_t region_offset = address - region->base_address;
+    if (region_offset + size > region->mapped_size) {
+        fprintf(stderr, "读取超出映射区域范围\n");
+        return -1;
+    }
+
+    memcpy(buffer, (char*)region->mapped_memory + region_offset, size);
+    return 0;
+}
+
+
 int32_t 读内存i32(vm_address_t address) {
-    void* ptr = read_memory(address, sizeof(int32_t));
-    return ptr ? *(int32_t*)ptr : 0;
+    int32_t value;
+    if (读内存(address, &value, sizeof(value)) != 0) {
+        fprintf(stderr, "读取 int32 失败，地址: 0x%llx\n", (unsigned long long)address);
+        return 0;
+    }
+    return value;
 }
 
 int64_t 读内存i64(vm_address_t address) {
-    void* ptr = read_memory(address, sizeof(int64_t));
-    return ptr ? *(int64_t*)ptr : 0;
+    int64_t value;
+    if (读内存(address, &value, sizeof(value)) != 0) {
+        fprintf(stderr, "读取 int64 失败，地址: 0x%llx\n", (unsigned long long)address);
+        return 0;
+    }
+    return value;
 }
-
 float 读内存float(vm_address_t address) {
     void* ptr = read_memory(address, sizeof(float));
     return ptr ? *(float*)ptr : 0.0f;
