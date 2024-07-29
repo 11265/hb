@@ -36,8 +36,8 @@ static void cleanup_task_port() {
 
 // 函数：从任务端口读取内存
 static kern_return_t read_memory_from_task(mach_vm_address_t address, size_t size, void **buffer) {
-    mach_vm_size_t data_size = size;
-    vm_offset_t read_buffer;
+    vm_size_t data_size = size;  // 使用 vm_size_t
+    vm_address_t read_buffer;    // 使用 vm_address_t
     kern_return_t kret = vm_read_overwrite(global_task_port, address, size, &read_buffer, &data_size);
     if (kret != KERN_SUCCESS) {
         printf("vm_read_overwrite 失败: %s\n", mach_error_string(kret));
@@ -49,7 +49,7 @@ static kern_return_t read_memory_from_task(mach_vm_address_t address, size_t siz
 }
 
 // 函数：释放资源
-static void release_resources(void *buffer, mach_vm_size_t size) {
+static void release_resources(void *buffer, vm_size_t size) {  // 使用 vm_size_t
     vm_deallocate(mach_task_self(), (vm_address_t)buffer, size);
 }
 
