@@ -2,21 +2,27 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define TARGET_PID 23569  // 替换为目标进程的 PID
-#define BASE_ADDRESS 0x00000000  // 映射内存开始地址
-#define MAP_SIZE 0x200000000  // 映射大小：0x200000000 - 0x00000000
+#define TARGET_PID 23569
+#define BASE_ADDRESS 0x00000000
+#define MAP_SIZE 0x200000000
 
 int c_main(void) {
-    if (initialize_memory_access(TARGET_PID, BASE_ADDRESS, MAP_SIZE) != 0) {
-        fprintf(stderr, "无法初始化内存访问\n");
+    printf("开始初始化内存访问...\n");
+    int result = initialize_memory_access(TARGET_PID, BASE_ADDRESS, MAP_SIZE);
+    if (result != 0) {
+        fprintf(stderr, "无法初始化内存访问，错误代码：%d\n", result);
         return -1;
     }
+    printf("内存访问初始化成功\n");
 
-    // 示例：读取某个地址的值（这里使用 0x102DD2404 作为示例）
     vm_address_t target_address = 0x104b94fc0;
+    printf("尝试读取地址 0x%llx\n", (unsigned long long)target_address);
+    
     int32_t int_value = 读内存i32(target_address);
-    printf("地址 0x%llx 处读取的 int32_t 值: %d\n", (unsigned long long)target_address, int_value);
+    printf("地址 0x%llx 处读取的 int32_t 值: %d (0x%x)\n", 
+           (unsigned long long)target_address, int_value, int_value);
 
     cleanup_memory_access();
+    printf("清理完成\n");
     return 0;
 }
