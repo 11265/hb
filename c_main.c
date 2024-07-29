@@ -2,9 +2,17 @@
 #include "查找进程.h"
 #include <stdio.h>
 #include <stdint.h>
+#include <stdarg.h>
+#include <string.h>
+#include <mach/mach.h>
 #include <mach-o/dyld_images.h>
 
 #define TARGET_PROCESS_NAME "pvz"
+
+extern task_t target_task;  // 声明外部变量
+
+// 声明读内存函数
+extern int 读内存(vm_address_t address, void* buffer, size_t size);
 
 // 新增：查找模块基地址的函数
 vm_address_t find_module_base(const char* module_name) {
@@ -40,6 +48,7 @@ vm_address_t find_module_base(const char* module_name) {
 
     return 0;
 }
+
 // 新增：多层指针读取函数
 int64_t read_multi_level_pointer(vm_address_t base_address, int num_offsets, ...) {
     va_list args;
