@@ -40,9 +40,10 @@ _read_memory:
     // 加载目标任务
     ldr x20, [sp]
 
-    // 加载要读取的地址
-    adrp x1, target_address
-    ldr x1, [x1, #:lo12:target_address]
+    // 要读取的地址 (0x102DD2404)
+    mov x1, #0x2404
+    movk x1, #0x02DD, lsl #16
+    movk x1, #0x1, lsl #32
 
     // 要读取的大小
     mov x2, #16
@@ -76,9 +77,6 @@ _exit:
     mov x0, #0
     ldp x29, x30, [sp], #40
     ret
-
-.data
-target_address: .quad 0x102DD2404
 
 .extern _mach_task_self
 .extern _task_for_pid
