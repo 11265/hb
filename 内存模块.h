@@ -1,5 +1,12 @@
 // 写入示例
-//写内存i32(0x10940c318, 12345);
+//写内存f64(TARGET_ADDRESS, 2.71828182845904);
+//printf("写入 double 数据: 2.71828182845904\n");
+//double_value = 读内存f64(TARGET_ADDRESS);
+//printf("读取 double 数据: %f\n", double_value);
+
+// 读取示例
+//int32_t int32_value = 读内存i32(TARGET_ADDRESS);
+//printf("读取 int32_t 数据: %d\n", int32_value);
 
 #ifndef MEMORY_READ_H
 #define MEMORY_READ_H
