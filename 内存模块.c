@@ -38,7 +38,7 @@ static kern_return_t read_memory_from_task(mach_vm_address_t address, size_t siz
     return KERN_SUCCESS;                                        // 返回成功
 }
 
-int read_int32(mach_vm_address_t address, int32_t *value) {
+int 读内存i32(mach_vm_address_t address, int32_t *value) {
     if (!is_task_port_initialized) {                            // 如果任务端口未初始化，返回错误
         return -1;
     }
@@ -50,7 +50,7 @@ int read_int32(mach_vm_address_t address, int32_t *value) {
     return 0;                                                   // 返回成功
 }
 
-int 读i64(mach_vm_address_t address, int64_t *value) {
+int 读内存i64(mach_vm_address_t address, int64_t *value) {
     if (!is_task_port_initialized) {                            // 如果任务端口未初始化，返回错误
         return -1;
     }
