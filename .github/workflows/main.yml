@@ -34,5 +34,5 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v2
       with:
-        name: mmap_memory
-        path: mmap_memory
+        name: memory_read
+        path: memory_read
