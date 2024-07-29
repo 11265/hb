@@ -7,25 +7,6 @@
 #include <pthread.h>
 
 #define ALIGN4(size) (((size) + 3) & ~3)
-#define NUM_THREADS 4
-
-typedef struct {
-    vm_address_t base_address;
-    void* mapped_memory;
-    vm_size_t mapped_size;
-    uint32_t access_count;
-    time_t last_access;
-} __attribute__((aligned(4))) MemoryRegion;
-
-typedef struct {
-    vm_address_t address;
-    void* result;
-    pthread_cond_t* cond;
-    pthread_mutex_t* mutex;
-    int* completed;
-    int is_write;
-    char write_value[8];
-} __attribute__((aligned(4))) MemoryRequest;
 
 typedef struct {
     pthread_t thread;
@@ -221,7 +202,7 @@ static void* mapper_thread_func(void* arg) {
     return NULL;
 }
 
-int initialize_memory_module(pid_t pid) {  // 初始化内存模块
+int initialize_memory_module(pid_t pid) {
     target_pid = pid;
     kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &target_task);
     if (kr != KERN_SUCCESS) {
@@ -252,7 +233,7 @@ int initialize_memory_module(pid_t pid) {  // 初始化内存模块
     return 0;
 }
 
-void cleanup_memory_module(void) {  // 清理内存模块
+void cleanup_memory_module(void) {
     pthread_mutex_lock(&requests_mutex);
     stop_threads = 1;
     pthread_cond_broadcast(&request_cond);
@@ -270,38 +251,38 @@ void cleanup_memory_module(void) {  // 清理内存模块
     mach_port_deallocate(mach_task_self(), target_task);
 }
 
-int32_t 读内存i32(vm_address_t address) {  // 读取32位整数
+int32_t 读内存i32(vm_address_t address) {
     void* ptr = read_memory_aligned(address, sizeof(int32_t));
     return ptr ? *(int32_t*)ptr : 0;
 }
 
-int64_t 读内存i64(vm_address_t address) {  // 读取64位整数
+int64_t 读内存i64(vm_address_t address) {
     void* ptr = read_memory_aligned(address, sizeof(int64_t));
     return ptr ? *(int64_t*)ptr : 0;
 }
 
-float 读内存f32(vm_address_t address) {  // 读取32位浮点数
+float 读内存f32(vm_address_t address) {
     void* ptr = read_memory_aligned(address, sizeof(float));
     return ptr ? *(float*)ptr : 0.0f;
 }
 
-double 读内存f64(vm_address_t address) {  // 读取64位浮点数
+double 读内存f64(vm_address_t address) {
     void* ptr = read_memory_aligned(address, sizeof(double));
     return ptr ? *(double*)ptr : 0.0;
 }
 
-int 写内存i32(vm_address_t address, int32_t value) {  // 写入32位整数
+int 写内存i32(vm_address_t address, int32_t value) {
     return write_memory_aligned(address, &value, sizeof(int32_t));
 }
 
-int 写内存i64(vm_address_t address, int64_t value) {  // 写入64位整数
+int 写内存i64(vm_address_t address, int64_t value) {
     return write_memory_aligned(address, &value, sizeof(int64_t));
 }
 
-int 写内存f32(vm_address_t address, float value) {  // 写入32位浮点数
+int 写内存f32(vm_address_t address, float value) {
     return write_memory_aligned(address, &value, sizeof(float));
 }
 
-int 写内存f64(vm_address_t address, double value) {  // 写入64位浮点数
+int 写内存f64(vm_address_t address, double value) {
     return write_memory_aligned(address, &value, sizeof(double));
 }
