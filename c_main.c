@@ -6,7 +6,17 @@
 #define TARGET_ADDRESS 0x10000000  // 替换为目标内存地址
 #define MAP_SIZE 4096  // 映射大小，可根据需要调整
 
-int main() {
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int c_main(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+int c_main(void) {
     if (initialize_memory_access(TARGET_PID, TARGET_ADDRESS, MAP_SIZE) != 0) {
         return -1;
     }
