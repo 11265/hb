@@ -6,14 +6,12 @@
 #include "内存模块.h"
 
 #define TARGET_PID 22496
-#define TARGET_PID 22496
 #define TARGET_ADDRESS 0x102DD2404
 #define TARGET_ADDRESS1 0x102dcc678
 #define TARGET_ADDRESS2 0x10940c318
 
 int c_main() {
     printf("目标进程 PID: %d\n", TARGET_PID);
-    printf("目标内存地址: 0x%llx\n", (unsigned long long)TARGET_ADDRESS);
 
     if (initialize_task_port(TARGET_PID) != KERN_SUCCESS) {
         printf("初始化任务端口失败\n");
