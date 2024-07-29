@@ -41,7 +41,7 @@ int 写内存i64(vm_address_t address, int64_t value);
 int 写内存f32(vm_address_t address, float value);
 int 写内存f64(vm_address_t address, double value);
 
-static MemoryRegion* get_or_create_page(vm_address_t address);
+MemoryRegion* get_or_create_page(vm_address_t address);
 void* 处理内存请求(void* arg);
 
 #endif // MEMORY_MODULE_H
