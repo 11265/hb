@@ -102,13 +102,13 @@ void* 读任意地址(vm_address_t address, size_t size) {
     }
     
     size_t offset = address - region->base_address;
+    void* buffer = malloc(size);  // 总是分配新的内存
+    if (!buffer) {
+        return NULL;
+    }
+    
     if (offset + size > PAGE_SIZE) {
-        // 如果读取跨越了页面边界，我们需要分配一个新的缓冲区
-        void* buffer = malloc(size);
-        if (!buffer) {
-            return NULL;
-        }
-        
+        // 如果读取跨越了页面边界，我们需要分段读取
         size_t first_part = PAGE_SIZE - offset;
         memcpy(buffer, (char*)region->mapped_memory + offset, first_part);
         
@@ -122,12 +122,12 @@ void* 读任意地址(vm_address_t address, size_t size) {
         
         memcpy((char*)buffer + first_part, remaining_data, remaining);
         free(remaining_data);
-        
-        return buffer;
     } else {
-        // 如果读取没有跨越页面边界，直接返回映射内存中的指针
-        return (char*)region->mapped_memory + offset;
+        // 如果读取没有跨越页面边界，直接复制数据
+        memcpy(buffer, (char*)region->mapped_memory + offset, size);
     }
+    
+    return buffer;
 }
 
 int 写任意地址(vm_address_t address, const void* data, size_t size) {
@@ -158,9 +158,7 @@ int32_t 读内存i32(vm_address_t address) {
         return 0;
     }
     int32_t result = *(int32_t*)data;
-    if (data != (void*)((char*)get_or_create_page(address)->mapped_memory + (address & (PAGE_SIZE - 1)))) {
-        free(data);
-    }
+    free(data);
     return result;
 }
 
@@ -170,9 +168,7 @@ int64_t 读内存i64(vm_address_t address) {
         return 0;
     }
     int64_t result = *(int64_t*)data;
-    if (data != (void*)((char*)get_or_create_page(address)->mapped_memory + (address & (PAGE_SIZE - 1)))) {
-        free(data);
-    }
+    free(data);
     return result;
 }
 
@@ -182,9 +178,7 @@ float 读内存f32(vm_address_t address) {
         return 0.0f;
     }
     float result = *(float*)data;
-    if (data != (void*)((char*)get_or_create_page(address)->mapped_memory + (address & (PAGE_SIZE - 1)))) {
-        free(data);
-    }
+    free(data);
     return result;
 }
 
@@ -194,9 +188,7 @@ double 读内存f64(vm_address_t address) {
         return 0.0;
     }
     double result = *(double*)data;
-    if (data != (void*)((char*)get_or_create_page(address)->mapped_memory + (address & (PAGE_SIZE - 1)))) {
-        free(data);
-    }
+    free(data);
     return result;
 }
 
