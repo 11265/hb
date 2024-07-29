@@ -97,23 +97,3 @@ int c_main() {
     printf("c_main 执行完成\n");
     return 0;
 }
-
-/*
-void 初始化数据()
-{
-	hWindows = FindWindow(NULL, L"地下城与勇士");
-	if (hWindows == NULL) {
-		MessageBox(NULL, TEXT("未找到该窗口！"), TEXT("错误"), MB_OK);
-		return;
-	}
-	ThreadID = GetWindowThreadProcessId(hWindows, &ProcessID);
-	if (ProcessID == NULL) {
-		MessageBox(NULL, TEXT("获取进程id失败！"), TEXT("错误"), MB_OK);
-		return;
-	}
-	进程ID = OpenProcess(PROCESS_ALL_ACCESS, FALSE, ProcessID);
-	if (进程ID == NULL) {
-		MessageBox(NULL, TEXT("获取进程id失败！"), TEXT("错误"), MB_OK);
-		return;
-	}
-} 
