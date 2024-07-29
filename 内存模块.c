@@ -30,7 +30,7 @@ static MemoryRequest pending_requests[MAX_PENDING_REQUESTS];
 static int num_pending_requests = 0;
 static int stop_threads = 0;
 
-static MemoryRegion* get_or_create_page(vm_address_t address) {
+MemoryRegion* get_or_create_page(vm_address_t address) {
     vm_address_t page_address = address & PAGE_MASK;
     
     pthread_mutex_lock(&regions_mutex);
