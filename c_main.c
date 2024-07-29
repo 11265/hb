@@ -53,14 +53,13 @@ int c_main(void) {
     }
     printf("第一级指针值: 0x%llx\n", (unsigned long long)addr1);
 
-    int64_t final_address = 读内存i64(addr1 + 0x400);
-    if (final_address == 0) {
-        fprintf(stderr, "无法读取第二级指针\n");
-        mach_port_deallocate(mach_task_self(), target_task);
-        cleanup_memory_module();
-        return -1;
-    }
-    printf("最终地址: 0x%llx\n", (unsigned long long)final_address);
+    int64_t final_value = read_multi_level_pointer(target_task, module_base, num_offsets, offset1, offset2, ...);
+    
+    printf("最终值: %lld (0x%llx)\n", (long long)final_value, (unsigned long long)final_value);
+
+    // 如果需要，可以根据最终值进行进一步处理
+    // 例如，如果这是一个游戏中的分数或其他数值
+    printf("游戏中的值: %d\n", (int)final_value);
 
     int32_t value = 读内存i32(final_address);
     printf("读取的值: %d (0x%x)\n", value, value);
