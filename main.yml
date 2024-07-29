@@ -26,6 +26,8 @@ jobs:
 
     - name: Compile C files
       run: |
+        ls -la
+        if [ -f 内存模块.c ]; then echo "内存模块.c found"; else echo "内存模块.c not found"; fi
         xcrun -sdk iphoneos clang -c 内存模块.c -o 内存模块.o -arch arm64 -mios-version-min=14.0 -Wno-incompatible-pointer-types
         xcrun -sdk iphoneos clang -c c_main.c -o c_main.o -arch arm64 -mios-version-min=14.0
         xcrun -sdk iphoneos clang -c 查找进程.c -o 查找进程.o -arch arm64 -mios-version-min=14.0
