@@ -26,7 +26,7 @@ int c_main() {
     }
 
     int64_t int64_value;                                        // 64位整数变量
-    if (读i64(TARGET_ADDRESS, &int64_value) == 0) {        // 读取64位整数
+    if (读内存i64(TARGET_ADDRESS, &int64_value) == 0) {        // 读取64位整数
         printf("读取 int64_t 数据成功: %lld\n", int64_value);   // 打印读取的64位整数
     } else {
         printf("读取 int64_t 数据失败\n");                      // 如果读取失败，打印错误信息
