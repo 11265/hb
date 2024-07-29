@@ -1,4 +1,4 @@
-.equ TARGET_PID, 1234  // 将这里的1234替换为目标进程的实际PID
+.equ TARGET_PID, 22496  // 将这里的1234替换为目标进程的实际PID
 .global _main
 .align 2
 
