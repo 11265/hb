@@ -49,7 +49,8 @@ _read_memory:
 
     // 打印读取的字节数
     ldr x1, [sp]
-    adr x0, read_msg
+    adrp x0, read_msg@PAGE
+    add x0, x0, read_msg@PAGEOFF
     bl _printf
 
     b _exit
@@ -57,7 +58,8 @@ _read_memory:
 _print_error:
     // 打印错误信息
     mov x1, x0
-    adr x0, error_msg
+    adrp x0, error_msg@PAGE
+    add x0, x0, error_msg@PAGEOFF
     bl _printf
 
 _exit:
@@ -65,7 +67,7 @@ _exit:
     ldp x29, x30, [sp], #40
     ret
 
-.data
+.section __DATA,__data
 read_msg: .asciz "Read %d bytes\n"
 error_msg: .asciz "Error: %d\n"
 
