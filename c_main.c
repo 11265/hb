@@ -42,21 +42,32 @@ int c_main(void) {
     printf("pvz 模块基地址: 0x%llx\n", (unsigned long long)base_address);
 
     // 定义偏移量
-    int64_t offset1 = 0x20A7AA0;// 替换为实际的偏移量
-    int64_t offset2 = 0x0;  // 替换为实际的偏移量
-    int num_offsets = 2;  // 使用的偏移量数量
+    int64_t offset1 = 0x20A7AA0;
+    int64_t offset2 = 0x400;  // 修正为 0x400
+    int num_offsets = 2;
 
     // 读取多级指针
-    int64_t final_value = read_multi_level_pointer(target_task, base_address, num_offsets, offset1, offset2);
+    int64_t final_address = read_multi_level_pointer(target_task, base_address, num_offsets, offset1, offset2);
     
-    printf("最终值: %lld (0x%llx)\n", (long long)final_value, (unsigned long long)final_value);
+    if (final_address == 0) {
+        fprintf(stderr, "无法读取多级指针\n");
+        mach_port_deallocate(mach_task_self(), target_task);
+        cleanup_memory_module();
+        return -1;
+    }
 
-    // 如果需要，可以进一步处理最终值
-    // 例如，如果这是游戏中的分数或其他值
-    printf("游戏中的值: %d\n", (int)final_value);
+    printf("最终地址: 0x%llx\n", (unsigned long long)final_address);
 
-    // 从最终地址读取32位值
-    int32_t value = 读内存i32(final_value);
+    // 读取 32 位整数值
+    int32_t value;
+    int read_result = 读内存i32(final_address, &value);
+    if (read_result != 0) {
+        fprintf(stderr, "读取内存失败，错误代码：%d\n", read_result);
+        mach_port_deallocate(mach_task_self(), target_task);
+        cleanup_memory_module();
+        return -1;
+    }
+
     printf("读取的值: %d (0x%x)\n", value, value);
 
     mach_port_deallocate(mach_task_self(), target_task);  // 释放目标进程的task
