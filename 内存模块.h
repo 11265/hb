@@ -22,6 +22,7 @@ typedef struct {
     size_t size;
     void* buffer;
     int operation; // 0 for read, 1 for write
+    void* result;  // 用于存储操作结果
 } MemoryRequest;
 
 int 初始化内存模块(pid_t pid);
@@ -40,7 +41,7 @@ int 写内存i64(vm_address_t address, int64_t value);
 int 写内存f32(vm_address_t address, float value);
 int 写内存f64(vm_address_t address, double value);
 
-// 添加这个函数声明
 static MemoryRegion* get_or_create_page(vm_address_t address);
+void* 处理内存请求(void* arg);
 
 #endif // MEMORY_MODULE_H
