@@ -5,10 +5,10 @@
 #include <stdint.h>
 #include <mach/mach.h>
 
-#define TARGET_PROCESS_NAME "pvz"
+#define TARGET_PROCESS_NAME "pvz"  // 定义目标进程名称
 
 int c_main(void) {
-    pid_t target_pid = get_pid_by_name(TARGET_PROCESS_NAME);
+    pid_t target_pid = get_pid_by_name(TARGET_PROCESS_NAME);  // 获取目标进程的PID
     if (target_pid == -1) {
         fprintf(stderr, "未找到进程：%s\n", TARGET_PROCESS_NAME);
         return -1;
@@ -16,16 +16,15 @@ int c_main(void) {
     
     printf("找到进程 %s，PID: %d\n", TARGET_PROCESS_NAME, target_pid);
 
-    int result = initialize_memory_module(target_pid);
+    int result = initialize_memory_module(target_pid);  // 初始化内存模块
     if (result != 0) {
         fprintf(stderr, "无法初始化内存模块，错误代码：%d\n", result);
         return -1;
     }
     printf("内存模块初始化成功\n");
 
-    // 获取目标进程的 task
     task_t target_task;
-    kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &target_task);
+    kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &target_task);  // 获取目标进程的task
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "无法获取目标进程的 task，错误码: %d\n", kr);
         cleanup_memory_module();
@@ -33,8 +32,7 @@ int c_main(void) {
     }
     printf("成功获取目标进程的 task\n");
 
-    // 查找 "pvz" 模块的基地址
-    vm_address_t base_address = find_module_base(target_task, "pvz");
+    vm_address_t base_address = find_module_base(target_task, "pvz");  // 查找"pvz"模块的基地址
     if (base_address == 0) {
         fprintf(stderr, "未找到 pvz 模块\n");
         mach_port_deallocate(mach_task_self(), target_task);
@@ -43,28 +41,27 @@ int c_main(void) {
     }
     printf("pvz 模块基地址: 0x%llx\n", (unsigned long long)base_address);
 
-    // Define offsets
+    // 定义偏移量
     int64_t offset1 = 0x20A7AA0;
-    int64_t offset2 = 0x0;  // Replace with actual offset
-    int num_offsets = 2;  // Number of offsets we're using
+    int64_t offset2 = 0x0;  // 替换为实际的偏移量
+    int num_offsets = 2;  // 使用的偏移量数量
 
-    // Read multi-level pointer
+    // 读取多级指针
     int64_t final_value = read_multi_level_pointer(target_task, base_address, num_offsets, offset1, offset2);
     
     printf("最终值: %lld (0x%llx)\n", (long long)final_value, (unsigned long long)final_value);
 
-    // If needed, you can process the final value further
-    // For example, if this is a score or other value in the game
+    // 如果需要，可以进一步处理最终值
+    // 例如，如果这是游戏中的分数或其他值
     printf("游戏中的值: %d\n", (int)final_value);
 
-    // Read a 32-bit value from the final address
+    // 从最终地址读取32位值
     int32_t value = 读内存i32(final_value);
     printf("读取的值: %d (0x%x)\n", value, value);
 
-    // 释放目标进程的 task
-    mach_port_deallocate(mach_task_self(), target_task);
+    mach_port_deallocate(mach_task_self(), target_task);  // 释放目标进程的task
 
-    cleanup_memory_module();
+    cleanup_memory_module();  // 清理内存模块
     printf("清理完成\n");
     return 0;
 }
