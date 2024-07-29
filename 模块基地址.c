@@ -52,11 +52,7 @@ int64_t read_multi_level_pointer(task_t target_task, vm_address_t base_address, 
     int64_t current_address = base_address;
     for (int i = 0; i < num_offsets; i++) {
         int64_t offset = va_arg(args, int64_t);
-        if (读内存i64(current_address, &current_address) != 0) {
-            printf("无法读取第 %d 层指针\n", i + 1);
-            va_end(args);
-            return 0;
-        }
+        current_address = 读内存i64(current_address);
         if (current_address == 0) {
             printf("第 %d 层指针为空\n", i + 1);
             va_end(args);
