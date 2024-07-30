@@ -312,6 +312,8 @@ void* worker_thread(void* arg) {
     
     return NULL;
 }
+
+//----------------------------------------------------------------------------------------------------------------------------
 int 初始化内存模块(pid_t pid) {
     target_pid = pid;
     kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &target_task);
@@ -351,7 +353,7 @@ void 关闭内存模块() {
     
     mach_port_deallocate(mach_task_self(), target_task);
 }
-
+//---------------------------------------------------------------------------------------------------------------------------------------------
 // Helper function to add a request to the queue
 static int add_request(int operation, vm_address_t address, void* buffer, size_t size) {
     pthread_mutex_lock(&requests_mutex);
