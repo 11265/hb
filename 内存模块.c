@@ -215,6 +215,7 @@ MemoryReadResult 读任意地址(vm_address_t address, size_t size) {
 int 写任意地址(vm_address_t address, const void* data, size_t size) {
     MemoryRegion* region = get_or_create_page(address);
     if (!region) {
+        fprintf(stderr, "Failed to get or create page for address 0x%lx\n", address);
         return -1;
     }
     
@@ -224,13 +225,24 @@ int 写任意地址(vm_address_t address, const void* data, size_t size) {
         memcpy((char*)region->mapped_memory + offset, data, first_part);
         
         size_t remaining = size - first_part;
-        return 写任意地址(address + first_part, (char*)data + first_part, remaining);
+        int result = 写任意地址(address + first_part, (char*)data + first_part, remaining);
+        if (result != 0) {
+            fprintf(stderr, "Failed to write remaining data at address 0x%lx\n", address + first_part);
+            return result;
+        }
     } else {
         memcpy((char*)region->mapped_memory + offset, data, size);
-        return 0;
     }
-}
 
+    // Attempt to write back the changes to the target process
+    kern_return_t kr = vm_write(target_task, region->base_address, (vm_offset_t)region->mapped_memory, region->mapped_size);
+    if (kr != KERN_SUCCESS) {
+        fprintf(stderr, "Failed to write memory back to target process. Error: %d\n", kr);
+        return -2;
+    }
+
+    return 0;
+}
 int32_t 读内存i32(vm_address_t address) {
     MemoryReadResult result = 读任意地址(address, sizeof(int32_t));
     if (!result.data) {
