@@ -24,13 +24,7 @@ int c_main(void) {
     }
     printf("内存模块初始化成功\n");
 
-    // 获取 "pvz" 模块的基地址
-    mach_vm_address_t base_address = 获取模块基地址("pvz");
-    if (base_address == 0) {
-        printf("获取模块基地址失败\n");
-        关闭内存模块();
-        return 1;
-    }
+
 
     关闭内存模块();
     printf("关闭内存模块 'pvz'\n");
