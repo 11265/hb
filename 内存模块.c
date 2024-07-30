@@ -9,20 +9,19 @@
 #include <mach-o/loader.h>
 #include <mach/vm_map.h>
 #include <mach-o/dyld_images.h>
-#include <mach/mach_vm.h>
-
-
+#include <pthread.h>
+#include <time.h>
 
 #define ALIGN4(size) (((size) + 3) & ~3)
-#define PAGE_SIZE 4096
-#define PAGE_MASK (~(PAGE_SIZE - 1))
+#define INITIAL_CACHED_REGIONS 100
+#define SMALL_ALLOCATION_THRESHOLD 256
+#define MEMORY_POOL_SIZE (1024 * 1024)  // 1 MB
 
 extern task_t target_task;
 static MemoryRegion *cached_regions = NULL;
 static int num_cached_regions = 0;
 static int max_cached_regions = INITIAL_CACHED_REGIONS;
 static pid_t target_pid;
-static task_t target_task;
 
 static pthread_mutex_t regions_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -98,7 +97,7 @@ void 销毁内存池(MemoryPool* pool) {
 }
 
 static MemoryRegion* get_or_create_page(vm_address_t address) {
-    vm_address_t page_address = address & PAGE_MASK;
+    vm_address_t page_address = address & vm_page_mask;
     
     pthread_mutex_lock(&regions_mutex);
     
@@ -132,23 +131,23 @@ static MemoryRegion* get_or_create_page(vm_address_t address) {
         num_cached_regions--;
     }
     
-    void* mapped_memory = mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void* mapped_memory = mmap(NULL, vm_page_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (mapped_memory == MAP_FAILED) {
         pthread_mutex_unlock(&regions_mutex);
         return NULL;
     }
     
     mach_vm_size_t bytes_read;
-    kern_return_t kr = vm_read_overwrite(target_task, page_address, PAGE_SIZE, (vm_address_t)mapped_memory, &bytes_read);
-    if (kr != KERN_SUCCESS || bytes_read != PAGE_SIZE) {
-        munmap(mapped_memory, PAGE_SIZE);
+    kern_return_t kr = vm_read_overwrite(target_task, page_address, vm_page_size, (vm_address_t)mapped_memory, &bytes_read);
+    if (kr != KERN_SUCCESS || bytes_read != vm_page_size) {
+        munmap(mapped_memory, vm_page_size);
         pthread_mutex_unlock(&regions_mutex);
         return NULL;
     }
     
     cached_regions[num_cached_regions].base_address = page_address;
     cached_regions[num_cached_regions].mapped_memory = mapped_memory;
-    cached_regions[num_cached_regions].mapped_size = PAGE_SIZE;
+    cached_regions[num_cached_regions].mapped_size = vm_page_size;
     cached_regions[num_cached_regions].access_count = 1;
     cached_regions[num_cached_regions].last_access = time(NULL);
     
@@ -180,8 +179,8 @@ MemoryReadResult 读任意地址(vm_address_t address, size_t size) {
         return result;
     }
     
-    if (offset + size > PAGE_SIZE) {
-        size_t first_part = PAGE_SIZE - offset;
+    if (offset + size > vm_page_size) {
+        size_t first_part = vm_page_size - offset;
         memcpy(buffer, (char*)region->mapped_memory + offset, first_part);
         
         size_t remaining = size - first_part;
@@ -217,11 +216,10 @@ int 写任意地址(vm_address_t address, const void* data, size_t size) {
     }
     
     size_t offset = address - region->base_address;
-    if (offset + size > PAGE_SIZE) {
-        size_t first_part = PAGE_SIZE - offset;
+    if (offset + size > vm_page_size) {
+        size_t first_part = vm_page_size - offset;
         memcpy((char*)region->mapped_memory + offset, data, first_part);
         
-        // 写入目标进程内存
         kern_return_t kr = vm_write(target_task, address, (vm_offset_t)data, first_part);
         if (kr != KERN_SUCCESS) {
             return -1;
@@ -232,7 +230,6 @@ int 写任意地址(vm_address_t address, const void* data, size_t size) {
     } else {
         memcpy((char*)region->mapped_memory + offset, data, size);
         
-        // 写入目标进程内存
         kern_return_t kr = vm_write(target_task, address, (vm_offset_t)data, size);
         if (kr != KERN_SUCCESS) {
             return -1;
@@ -328,7 +325,6 @@ int 初始化内存模块(pid_t pid) {
     
     初始化内存池(&memory_pool);
     
-    // 修改目标进程的内存保护
     vm_address_t address = 0;
     vm_size_t size = 0;
     natural_t depth = 0;
@@ -342,27 +338,26 @@ int 初始化内存模块(pid_t pid) {
             vm_prot_t new_protection = info.protection | VM_PROT_WRITE;
             kr = vm_protect(target_task, address, size, FALSE, new_protection);
             if (kr != KERN_SUCCESS) {
-                // 只保留修改属性失败的调试信息
-                printf("无法修改地址处的内存保护 0x%llx, size: %llu, error: %d\n", 
-                       (unsigned long long)address, (unsigned long long)size, kr);
+                printf("无法修改地址处的内存保护 0x%llx\n", (unsigned long long)address);
             }
         }
 
         address += size;
     }
-
+    
     return 0;
 }
 
-void 关闭内存模块() {
+void 清理内存模块() {
     for (int i = 0; i < num_cached_regions; i++) {
         munmap(cached_regions[i].mapped_memory, cached_regions[i].mapped_size);
     }
-    
     free(cached_regions);
+    cached_regions = NULL;
+    num_cached_regions = 0;
+    
     销毁内存池(&memory_pool);
 }
-
 
 mach_vm_address_t 获取模块基地址(const char* module_name) {
     mach_vm_address_t address = 0;
@@ -382,45 +377,130 @@ mach_vm_address_t 获取模块基地址(const char* module_name) {
         if (info.is_submap) {
             depth++;
         } else {
-            // 检查这个内存区域是否是可执行的
             if (info.protection & VM_PROT_EXECUTE) {
-                // 读取这个区域的前4096字节（假设这足够包含Mach-O头部）
                 char buffer[4096];
+                mach_vm_size_t bytes
                 mach_vm_size_t bytes_read;
-                kr = mach_vm_read_overwrite(target_task, address, 4096, (mach_vm_address_t)buffer, &bytes_read);
+                kr = vm_read_overwrite(target_task, address, sizeof(buffer), (vm_address_t)buffer, &bytes_read);
                 
-                if (kr == KERN_SUCCESS && bytes_read == 4096) {
-                    // 检查Mach-O魔数
-                    uint32_t magic = *(uint32_t*)buffer;
-                    if (magic == MH_MAGIC_64 || magic == MH_CIGAM_64) {
-                        struct mach_header_64* header = (struct mach_header_64*)buffer;
-                        char* string_table = buffer + sizeof(struct mach_header_64) + header->sizeofcmds;
-                        struct load_command* cmd = (struct load_command*)(buffer + sizeof(struct mach_header_64));
+                if (kr == KERN_SUCCESS && bytes_read > 0) {
+                    if (bytes_read >= sizeof(struct mach_header_64) &&
+                        ((struct mach_header_64 *)buffer)->magic == MH_MAGIC_64) {
+                        struct mach_header_64 *header = (struct mach_header_64 *)buffer;
+                        struct load_command *lc = (struct load_command *)(header + 1);
                         
                         for (uint32_t i = 0; i < header->ncmds; i++) {
-                            if (cmd->cmd == LC_SEGMENT_64) {
-                                struct segment_command_64* seg = (struct segment_command_64*)cmd;
+                            if (lc->cmd == LC_SEGMENT_64) {
+                                struct segment_command_64 *seg = (struct segment_command_64 *)lc;
                                 if (strcmp(seg->segname, "__TEXT") == 0) {
-                                    // 找到模块名称
-                                    char* name = strrchr(string_table, '/');
-                                    if (name) {
-                                        name++; // 跳过'/'
-                                        if (strcmp(name, module_name) == 0) {
+                                    char path[1024];
+                                    mach_vm_size_t path_len = sizeof(path);
+                                    kr = vm_read_overwrite(target_task, seg->vmaddr, path_len, (vm_address_t)path, &bytes_read);
+                                    
+                                    if (kr == KERN_SUCCESS && bytes_read > 0) {
+                                        if (strstr(path, module_name) != NULL) {
                                             return address;
                                         }
                                     }
-                                    break;
                                 }
                             }
-                            cmd = (struct load_command*)((char*)cmd + cmd->cmdsize);
+                            lc = (struct load_command *)((char *)lc + lc->cmdsize);
                         }
                     }
                 }
             }
-            
             address += size;
         }
     }
     
     return 0;
+}
+
+vm_address_t 查找特征码(vm_address_t start_address, vm_address_t end_address, const unsigned char* signature, const char* mask) {
+    size_t signature_length = strlen(mask);
+    
+    for (vm_address_t address = start_address; address < end_address - signature_length; address++) {
+        MemoryReadResult result = 读任意地址(address, signature_length);
+        if (!result.data) {
+            continue;
+        }
+        
+        int found = 1;
+        for (size_t i = 0; i < signature_length; i++) {
+            if (mask[i] == 'x' && ((unsigned char*)result.data)[i] != signature[i]) {
+                found = 0;
+                break;
+            }
+        }
+        
+        if (result.from_pool) {
+            内存池释放(&memory_pool, result.data);
+        } else {
+            free(result.data);
+        }
+        
+        if (found) {
+            return address;
+        }
+    }
+    
+    return 0;
+}
+
+vm_address_t 查找特征码范围(vm_address_t start_address, size_t search_size, const unsigned char* signature, const char* mask) {
+    return 查找特征码(start_address, start_address + search_size, signature, mask);
+}
+
+char* 读字符串(vm_address_t address) {
+    size_t buffer_size = 256;
+    char* buffer = malloc(buffer_size);
+    if (!buffer) {
+        return NULL;
+    }
+    
+    size_t total_read = 0;
+    while (1) {
+        MemoryReadResult result = 读任意地址(address + total_read, buffer_size - total_read);
+        if (!result.data) {
+            free(buffer);
+            return NULL;
+        }
+        
+        size_t chunk_size = 0;
+        while (chunk_size < buffer_size - total_read) {
+            if (((char*)result.data)[chunk_size] == '\0') {
+                memcpy(buffer + total_read, result.data, chunk_size + 1);
+                if (result.from_pool) {
+                    内存池释放(&memory_pool, result.data);
+                } else {
+                    free(result.data);
+                }
+                return buffer;
+            }
+            chunk_size++;
+        }
+        
+        memcpy(buffer + total_read, result.data, chunk_size);
+        total_read += chunk_size;
+        
+        if (result.from_pool) {
+            内存池释放(&memory_pool, result.data);
+        } else {
+            free(result.data);
+        }
+        
+        if (total_read == buffer_size) {
+            char* new_buffer = realloc(buffer, buffer_size * 2);
+            if (!new_buffer) {
+                free(buffer);
+                return NULL;
+            }
+            buffer = new_buffer;
+            buffer_size *= 2;
+        }
+    }
+}
+
+int 写字符串(vm_address_t address, const char* string) {
+    return 写任意地址(address, string, strlen(string) + 1);
 }
