@@ -26,15 +26,13 @@ int c_main(void) {
 
     // 获取 "pvz" 模块的基地址
     mach_vm_address_t base_address = 获取模块基地址("pvz");
-    if (base_address) {
-        printf("模块 'pvz' 的基地址: 0x%llx\n", base_address);
-    } else {
-        printf("未找到模块 'pvz'\n");
+    if (base_address == 0) {
+        printf("获取模块基地址失败\n");
         关闭内存模块();
-        printf("关闭内存模块 'pvz'\n");
         return 1;
     }
 
     关闭内存模块();
+    printf("关闭内存模块 'pvz'\n");
     return 0;
 }
