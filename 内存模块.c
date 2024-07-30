@@ -166,49 +166,51 @@ MemoryReadResult 读任意地址(vm_address_t address, size_t size) {
     MemoryReadResult result = {NULL, 0};
     MemoryRegion* region = get_or_create_page(address);
     if (!region) {
-        printf("无法获取或创建内存页，地址：0x%lx\n", address);
         return result;
     }
     
     size_t offset = address - region->base_address;
-    void* buffer = malloc(size);
+    void* buffer;
+    int use_memory_pool = (size <= SMALL_ALLOCATION_THRESHOLD);
+    if (use_memory_pool) {
+        buffer = 内存池分配(&memory_pool, size);
+    }
     if (!buffer) {
-        printf("内存分配失败，大小：%zu\n", size);
+        buffer = malloc(size);
+        use_memory_pool = 0;
+    }
+    
+    if (!buffer) {
         return result;
     }
     
     if (offset + size > PAGE_SIZE) {
         size_t first_part = PAGE_SIZE - offset;
-        mach_vm_size_t bytes_read;
-        kern_return_t kr = vm_read_overwrite(target_task, region->base_address + offset, first_part, (vm_address_t)buffer, &bytes_read);
-        if (kr != KERN_SUCCESS || bytes_read != first_part) {
-            printf("读取第一部分失败，错误码：%d，读取字节：%zu\n", kr, bytes_read);
-            free(buffer);
-            return result;
-        }
+        memcpy(buffer, (char*)region->mapped_memory + offset, first_part);
         
         size_t remaining = size - first_part;
         MemoryReadResult remaining_result = 读任意地址(address + first_part, remaining);
         if (!remaining_result.data) {
-            printf("读取剩余部分失败\n");
-            free(buffer);
+            if (use_memory_pool) {
+                内存池释放(&memory_pool, buffer);
+            } else {
+                free(buffer);
+            }
             return result;
         }
         
         memcpy((char*)buffer + first_part, remaining_result.data, remaining);
-        free(remaining_result.data);
-    } else {
-        mach_vm_size_t bytes_read;
-        kern_return_t kr = vm_read_overwrite(target_task, region->base_address + offset, size, (vm_address_t)buffer, &bytes_read);
-        if (kr != KERN_SUCCESS || bytes_read != size) {
-            printf("读取失败，错误码：%d，读取字节：%zu\n", kr, bytes_read);
-            free(buffer);
-            return result;
+        if (remaining_result.from_pool) {
+            内存池释放(&memory_pool, remaining_result.data);
+        } else {
+            free(remaining_result.data);
         }
+    } else {
+        memcpy(buffer, (char*)region->mapped_memory + offset, size);
     }
     
     result.data = buffer;
-    result.from_pool = 0;
+    result.from_pool = use_memory_pool;
     return result;
 }
 
@@ -372,4 +374,98 @@ void 关闭内存模块() {
     
     free(cached_regions);
     销毁内存池(&memory_pool);
+}
+
+static int add_request(vm_address_t address, size_t size, void* buffer, int operation, void* result) {
+    pthread_mutex_lock(&requests_mutex);
+    
+    if (num_pending_requests >= MAX_PENDING_REQUESTS) {
+        pthread_mutex_unlock(&requests_mutex);
+        return -1;
+    }
+    
+    pending_requests[num_pending_requests].address = address;
+    pending_requests[num_pending_requests].size = size;
+    pending_requests[num_pending_requests].buffer = buffer;
+    pending_requests[num_pending_requests].operation = operation;
+    pending_requests[num_pending_requests].result = result;
+    
+    num_pending_requests++;
+    
+    pthread_cond_signal(&request_cond);
+    pthread_mutex_unlock(&requests_mutex);
+    
+    return 0;
+}
+
+MemoryReadResult 异步读任意地址(vm_address_t address, size_t size) {
+    MemoryReadResult result = {NULL, 0};
+    if (add_request(address, size, NULL, 0, &result) != 0) {
+        return result;
+    }
+    return result;
+}
+
+int 异步写任意地址(vm_address_t address, const void* data, size_t size) {
+    int result = -1;
+    if (add_request(address, size, (void*)data, 1, &result) != 0) {
+        return -1;
+    }
+    return result;
+}
+
+int32_t 异步读内存i32(vm_address_t address) {
+    MemoryReadResult result = 异步读任意地址(address, sizeof(int32_t));
+    if (!result.data) {
+        return 0;
+    }
+    int32_t value = *(int32_t*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
+}
+
+int64_t 异步读内存i64(vm_address_t address) {
+    MemoryReadResult result = 异步读任意地址(address, sizeof(int64_t));
+    if (!result.data) {
+        return 0;
+    }
+    int64_t value = *(int64_t*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
+}
+
+float 异步读内存f32(vm_address_t address) {
+    MemoryReadResult result = 异步读任意地址(address, sizeof(float));
+    if (!result.data) {
+        return 0.0f;
+    }
+    float value = *(float*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
+}
+
+double 异步读内存f64(vm_address_t address) {
+    MemoryReadResult result = 异步读任意地址(address, sizeof(double));
+    if (!result.data) {
+        return 0.0;
+    }
+    double value = *(double*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
 }
