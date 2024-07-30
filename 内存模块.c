@@ -334,13 +334,9 @@ int 初始化内存模块(pid_t pid) {
             vm_prot_t new_protection = info.protection | VM_PROT_WRITE;
             kr = vm_protect(target_task, address, size, FALSE, new_protection);
             if (kr != KERN_SUCCESS) {
-                // 处理错误
-                printf("Failed to modify memory protection at address 0x%llx, size: %llu, error: %d\n", 
+                // 只保留修改属性失败的调试信息
+                printf("无法修改地址处的内存保护 0x%llx, size: %llu, error: %d\n", 
                        (unsigned long long)address, (unsigned long long)size, kr);
-                // 注意：这里我们继续执行，而不是立即返回，因为我们可能还能修改其他内存区域
-            } else {
-                printf("Successfully modified memory protection at address 0x%llx, size: %llu\n", 
-                       (unsigned long long)address, (unsigned long long)size);
             }
         }
 
