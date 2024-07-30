@@ -58,7 +58,7 @@ static int get_proc_list(kinfo_proc **procList, size_t *procCount) {
     return err;
 }
 
-pid_t 根据进程名获取PID(const char *process_name) {
+pid_t get_pid_by_name(const char *process_name) {
     kinfo_proc *procList = NULL;
     size_t procCount = 0;
     int err = get_proc_list(&procList, &procCount);
