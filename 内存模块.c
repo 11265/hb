@@ -5,6 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <mach/mach.h>
+#include <mach-o/loader.h>
+#include <mach/vm_map.h>
+#include <mach-o/dyld_images.h>
 
 #define ALIGN4(size) (((size) + 3) & ~3)
 #define PAGE_SIZE 4096
@@ -359,13 +363,13 @@ void 关闭内存模块() {
 mach_vm_address_t 获取模块基地址(const char* module_name) {
     mach_vm_address_t address = 0;
     mach_vm_size_t size;
-    uint32_t depth = 0;
+    natural_t depth = 0;
     
     while (1) {
         struct vm_region_submap_info_64 info;
         mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_COUNT_64;
         
-        kern_return_t kr = mach_vm_region_recurse(target_task, &address, &size, &depth,
+        kern_return_t kr = vm_region_recurse(target_task, (vm_address_t*)&address, (vm_size_t*)&size, &depth,
                                     (vm_region_recurse_info_t)&info,
                                     &count);
         
@@ -374,7 +378,7 @@ mach_vm_address_t 获取模块基地址(const char* module_name) {
         if (info.protection & VM_PROT_EXECUTE) {
             char buffer[4096];
             mach_vm_size_t bytes_read;
-            kr = mach_vm_read_overwrite(target_task, address, 4096, (mach_vm_address_t)buffer, &bytes_read);
+            kr = vm_read_overwrite(target_task, address, 4096, (vm_address_t)buffer, (vm_size_t*)&bytes_read);
             
             if (kr == KERN_SUCCESS && bytes_read == 4096) {
                 if (*(uint32_t*)buffer == MH_MAGIC_64 || *(uint32_t*)buffer == MH_CIGAM_64) {
