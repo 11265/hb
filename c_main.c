@@ -21,31 +21,32 @@ int c_main(void) {
     }
     printf("内存模块初始化成功\n");
 
-    vm_address_t test_address = 0x106befe70; // 示例地址，请根据实际情况修改
+    vm_address_t test_address = 0x102F83E68; // 示例地址，请根据实际情况修改
 
-    // 测试写入和读取各种数据类型
-    // int32_t
-    int32_t test_i32 = -1234567890;
-    写内存i32(test_address, test_i32);
-    printf("写入 int32: %d, 读取 int32: %d\n", test_i32, 读内存i32(test_address));
+    // 读取初始 int32 值
+    int32_t initial_value = 读内存i32(test_address);
+    printf("初始 int32 值: %d\n", initial_value);
 
-    // int64_t
-    int64_t test_i64 = -1234567890123LL;
-    写内存i64(test_address, test_i64);
-    printf("写入 int64: %lld, 读取 int64: %lld\n", test_i64, 读内存i64(test_address));
+    // 写入新的 int32 值
+    int32_t new_value = 42; // 您可以修改这个值
+    if (写内存i32(test_address, new_value) == 0) {
+        printf("成功写入新的 int32 值: %d\n", new_value);
+    } else {
+        printf("写入新的 int32 值失败\n");
+    }
 
-    // float
-    float test_f32 = 3.14159f;
-    写内存f32(test_address, test_f32);
-    printf("写入 float: %f, 读取 float: %f\n", test_f32, 读内存f32(test_address));
+    // 再次读取 int32 值
+    int32_t final_value = 读内存i32(test_address);
+    printf("最终 int32 值: %d\n", final_value);
 
-    // double
-    double test_f64 = 2.71828182845904;
-    写内存f64(test_address, test_f64);
-    printf("写入 double: %.14f, 读取 double: %.14f\n", test_f64, 读内存f64(test_address));
-
-
+    // 验证写入是否成功
+    if (final_value == new_value) {
+        printf("写入成功验证：新值已正确写入并读取\n");
+    } else {
+        printf("写入失败验证：读取的值与写入的值不匹配\n");
+    }
 
     关闭内存模块();
+    printf("关闭内存模块\n");
     return 0;
 }
