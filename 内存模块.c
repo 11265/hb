@@ -455,3 +455,68 @@ void 关闭内存模块() {
     }
     销毁内存池(&memory_pool);
 }
+
+// 添加以下函数实现
+
+vm_address_t 获取模块基址(const char* module_name) {
+    task_dyld_info_data_t task_dyld_info;
+    mach_msg_type_number_t count = TASK_DYLD_INFO_COUNT;
+    if (task_info(target_task, TASK_DYLD_INFO, (task_info_t)&task_dyld_info, &count) != KERN_SUCCESS) {
+        return 0;
+    }
+
+    struct dyld_all_image_infos* all_image_infos = (struct dyld_all_image_infos*)task_dyld_info.all_image_info_addr;
+    struct dyld_all_image_infos infos;
+    if (读任意地址((vm_address_t)all_image_infos, sizeof(infos)).data == NULL) {
+        return 0;
+    }
+    memcpy(&infos, all_image_infos, sizeof(infos));
+
+    for (uint32_t i = 0; i < infos.infoArrayCount; i++) {
+        struct dyld_image_info image_info;
+        if (读任意地址((vm_address_t)&infos.infoArray[i], sizeof(image_info)).data == NULL) {
+            continue;
+        }
+        
+        char path[1024];
+        if (读任意地址((vm_address_t)image_info.imageFilePath, sizeof(path)).data == NULL) {
+            continue;
+        }
+        
+        if (strstr(path, module_name) != NULL) {
+            return (vm_address_t)image_info.imageLoadAddress;
+        }
+    }
+
+    return 0;
+}
+
+vm_address_t 读模块多级指针(const char* module_name, vm_address_t offset, int* offsets, int level) {
+    vm_address_t module_base = 获取模块基址(module_name);
+    if (module_base == 0) {
+        printf("无法找到模块: %s\n", module_name);
+        return 0;
+    }
+
+    vm_address_t current_address = module_base + offset;
+    
+    for (int i = 0; i < level; i++) {
+        MemoryReadResult result = 读任意地址(current_address, sizeof(vm_address_t));
+        if (!result.data) {
+            printf("无法读取地址 0x%llx\n", (unsigned long long)current_address);
+            return 0;
+        }
+        
+        current_address = *(vm_address_t*)result.data;
+        
+        if (result.from_pool) {
+            内存池释放(&memory_pool, result.data);
+        } else {
+            free(result.data);
+        }
+        
+        current_address += offsets[i];
+    }
+    
+    return current_address;
+}
