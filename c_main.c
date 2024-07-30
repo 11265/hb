@@ -18,9 +18,9 @@ int c_main(void) {
     
     printf("找到进程 %s，PID: %d\n", TARGET_PROCESS_NAME, target_pid);
 
-    int result = 初始化内存模块(target_pid);
-    if (result != 0) {
-        fprintf(stderr, "无法初始化内存模块，错误代码：%d\n", result);
+    int init_result = 初始化内存模块(target_pid);
+    if (init_result != 0) {
+        fprintf(stderr, "无法初始化内存模块，错误代码：%d\n", init_result);
         return -1;
     }
     printf("内存模块初始化成功\n");
@@ -52,13 +52,13 @@ int c_main(void) {
     size_t string_length = sizeof(test_string);
     写任意地址(test_address, test_string, string_length);
     
-    MemoryReadResult result = 读任意地址(test_address, string_length);
-    if (result.data) {
-        printf("写入字符串: %s, 读取字符串: %s\n", test_string, (char*)result.data);
-        if (result.from_pool) {
-            内存池释放(&memory_pool, result.data);
+    MemoryReadResult read_result = 读任意地址(test_address, string_length);
+    if (read_result.data) {
+        printf("写入字符串: %s, 读取字符串: %s\n", test_string, (char*)read_result.data);
+        if (read_result.from_pool) {
+            内存池释放(&memory_pool, read_result.data);
         } else {
-            free(result.data);
+            free(read_result.data);
         }
     } else {
         fprintf(stderr, "读取字符串失败\n");
