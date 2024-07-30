@@ -1,14 +1,14 @@
+// 内存模块.c
+
 #include "内存模块.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
-#include <time.h>
-#include <pthread.h>
 
 #define ALIGN4(size) (((size) + 3) & ~3)
-
-
+#define PAGE_SIZE 4096
+#define PAGE_MASK (~(PAGE_SIZE - 1))
 
 typedef struct {
     pthread_t thread;
@@ -30,7 +30,7 @@ static MemoryRequest pending_requests[MAX_PENDING_REQUESTS];
 static int num_pending_requests = 0;
 static int stop_threads = 0;
 
-static MemoryPool memory_pool;
+MemoryPool memory_pool;
 pthread_mutex_t memory_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void 初始化内存池(MemoryPool* pool) {
@@ -101,7 +101,7 @@ void 销毁内存池(MemoryPool* pool) {
     }
 }
 
-MemoryRegion* get_or_create_page(vm_address_t address) {
+static MemoryRegion* get_or_create_page(vm_address_t address) {
     vm_address_t page_address = address & PAGE_MASK;
     
     pthread_mutex_lock(&regions_mutex);
@@ -305,29 +305,32 @@ int 写内存f64(vm_address_t address, double value) {
     return 写任意地址(address, &value, sizeof(double));
 }
 
-void* 处理内存请求(void* arg) {
+static void* worker_thread(void* arg) {
+    ThreadInfo* info = (ThreadInfo*)arg;
+    
     while (1) {
         pthread_mutex_lock(&requests_mutex);
         while (num_pending_requests == 0 && !stop_threads) {
             pthread_cond_wait(&request_cond, &requests_mutex);
         }
         
-        if (stop_threads && num_pending_requests == 0) {
+        if (stop_threads) {
             pthread_mutex_unlock(&requests_mutex);
             break;
         }
-
+        
         MemoryRequest request = pending_requests[--num_pending_requests];
         pthread_mutex_unlock(&requests_mutex);
-
-        if (request.operation == 0) { // Read operation
-            MemoryReadResult result = 读任意地址(request.address, request.size);
-            *(MemoryReadResult*)request.result = result;
-        } else { // Write operation
-            int write_result = 写任意地址(request.address, request.buffer, request.size);
-            *(int*)request.result = write_result;
+        
+        if (request.operation == 0) { // 读操作
+            MemoryReadResult* result = (MemoryReadResult*)request.result;
+            *result = 读任意地址(request.address, request.size);
+        } else { // 写操作
+            int* result = (int*)request.result;
+            *result = 写任意地址(request.address, request.buffer, request.size);
         }
     }
+    
     return NULL;
 }
 
@@ -337,23 +340,21 @@ int 初始化内存模块(pid_t pid) {
     if (kr != KERN_SUCCESS) {
         return -1;
     }
-
-    cached_regions = malloc(max_cached_regions * sizeof(MemoryRegion));
+    
+    cached_regions = malloc(sizeof(MemoryRegion) * max_cached_regions);
     if (!cached_regions) {
         return -1;
     }
-
+    
     初始化内存池(&memory_pool);
-    if (!memory_pool.pool) {
-        free(cached_regions);
-        return -1;
-    }
-
+    
     for (int i = 0; i < NUM_THREADS; i++) {
         thread_pool[i].id = i;
-        pthread_create(&thread_pool[i].thread, NULL, 处理内存请求, &thread_pool[i].id);
+        if (pthread_create(&thread_pool[i].thread, NULL, worker_thread, &thread_pool[i]) != 0) {
+            return -1;
+        }
     }
-
+    
     return 0;
 }
 
@@ -362,71 +363,57 @@ void 关闭内存模块() {
     stop_threads = 1;
     pthread_cond_broadcast(&request_cond);
     pthread_mutex_unlock(&requests_mutex);
-
+    
     for (int i = 0; i < NUM_THREADS; i++) {
         pthread_join(thread_pool[i].thread, NULL);
     }
-
+    
     for (int i = 0; i < num_cached_regions; i++) {
         munmap(cached_regions[i].mapped_memory, cached_regions[i].mapped_size);
     }
-
+    
     free(cached_regions);
     销毁内存池(&memory_pool);
 }
 
-// 辅助函数，用于添加内存请求到队列
-static int 添加内存请求(vm_address_t address, size_t size, void* buffer, int operation, void* result) {
+static int add_request(vm_address_t address, size_t size, void* buffer, int operation, void* result) {
     pthread_mutex_lock(&requests_mutex);
     
     if (num_pending_requests >= MAX_PENDING_REQUESTS) {
         pthread_mutex_unlock(&requests_mutex);
         return -1;
     }
-
-    MemoryRequest* request = &pending_requests[num_pending_requests++];
-    request->address = address;
-    request->size = size;
-    request->buffer = buffer;
-    request->operation = operation;
-    request->result = result;
-
+    
+    pending_requests[num_pending_requests].address = address;
+    pending_requests[num_pending_requests].size = size;
+    pending_requests[num_pending_requests].buffer = buffer;
+    pending_requests[num_pending_requests].operation = operation;
+    pending_requests[num_pending_requests].result = result;
+    
+    num_pending_requests++;
+    
     pthread_cond_signal(&request_cond);
     pthread_mutex_unlock(&requests_mutex);
-
+    
     return 0;
 }
 
-// 以下是异步版本的读写函数
 MemoryReadResult 异步读任意地址(vm_address_t address, size_t size) {
     MemoryReadResult result = {NULL, 0};
-    if (添加内存请求(address, size, NULL, 0, &result) != 0) {
+    if (add_request(address, size, NULL, 0, &result) != 0) {
         return result;
     }
-    
-    // 等待结果
-    while (result.data == NULL) {
-        usleep(1000); // 休眠1毫秒
-    }
-
     return result;
 }
 
 int 异步写任意地址(vm_address_t address, const void* data, size_t size) {
     int result = -1;
-    if (添加内存请求(address, size, (void*)data, 1, &result) != 0) {
+    if (add_request(address, size, (void*)data, 1, &result) != 0) {
         return -1;
     }
-
-    // 等待结果
-    while (result == -1) {
-        usleep(1000); // 休眠1毫秒
-    }
-
     return result;
 }
 
-// 以下是异步版本的读写基本类型函数
 int32_t 异步读内存i32(vm_address_t address) {
     MemoryReadResult result = 异步读任意地址(address, sizeof(int32_t));
     if (!result.data) {
@@ -481,20 +468,4 @@ double 异步读内存f64(vm_address_t address) {
         free(result.data);
     }
     return value;
-}
-
-int 异步写内存i32(vm_address_t address, int32_t value) {
-    return 异步写任意地址(address, &value, sizeof(int32_t));
-}
-
-int 异步写内存i64(vm_address_t address, int64_t value) {
-    return 异步写任意地址(address, &value, sizeof(int64_t));
-}
-
-int 异步写内存f32(vm_address_t address, float value) {
-    return 异步写任意地址(address, &value, sizeof(float));
-}
-
-int 异步写内存f64(vm_address_t address, double value) {
-    return 异步写任意地址(address, &value, sizeof(double));
 }
