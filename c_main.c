@@ -27,7 +27,8 @@ int c_main(void) {
 
     // 测试写入和读取 int32_t
     int32_t test_i32 = 12345;
-    if (写内存i32(test_address, test_i32) == 0) {
+    if (写内存i32(test_address, test_i32) == 0) 
+    {
         printf("写入 int32 成功: %d\n", test_i32);
         printf("读取 int32: %d\n", 读内存i32(test_address));
     } else {
