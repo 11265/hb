@@ -46,7 +46,7 @@ void* scan_thread(void* arg) {
         
         if (读任意地址(current, buffer, batch_size) == 0) {
             for (size_t i = 0; i < batch_size / sizeof(int32_t); i++) {
-                if (buffer[i] > 1000000) {
+                if (buffer[i] > 100) {
                     pthread_mutex_lock(range->mutex);
                     if (range->result_count < MAX_RESULTS) {
                         range->results[range->result_count].address = current + i * sizeof(int32_t);
