@@ -363,6 +363,8 @@ mach_vm_address_t 获取模块基地址(const char* module_name) {
     mach_vm_size_t size;
     natural_t depth = 0;
     
+    printf("开始查找模块: %s\n", module_name);
+    
     while (1) {
         struct vm_region_submap_info_64 info;
         mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_COUNT_64;
@@ -371,19 +373,31 @@ mach_vm_address_t 获取模块基地址(const char* module_name) {
                                     (vm_region_info_64_t)&info,
                                     &count);
         
-        if (kr != KERN_SUCCESS) break;
+        if (kr != KERN_SUCCESS) {
+            printf("vm_region_recurse_64 失败，错误码: %d\n", kr);
+            break;
+        }
+        
+        printf("检查地址: 0x%llx, 大小: %llu\n", address, size);
         
         if (info.is_submap) {
             depth++;
+            printf("发现子映射，深度增加到: %d\n", depth);
         } else {
             if (info.protection & VM_PROT_EXECUTE) {
+                printf("发现可执行区域\n");
+                
                 char buffer[4096];
                 mach_vm_size_t bytes_read;
                 kr = vm_read_overwrite(target_task, address, sizeof(buffer), (vm_address_t)buffer, &bytes_read);
                 
                 if (kr == KERN_SUCCESS && bytes_read > 0) {
+                    printf("成功读取内存，字节数: %llu\n", bytes_read);
+                    
                     if (bytes_read >= sizeof(struct mach_header_64) &&
                         ((struct mach_header_64 *)buffer)->magic == MH_MAGIC_64) {
+                        printf("发现有效的Mach-O头\n");
+                        
                         struct mach_header_64 *header = (struct mach_header_64 *)buffer;
                         struct load_command *lc = (struct load_command *)(header + 1);
                         
@@ -391,26 +405,38 @@ mach_vm_address_t 获取模块基地址(const char* module_name) {
                             if (lc->cmd == LC_SEGMENT_64) {
                                 struct segment_command_64 *seg = (struct segment_command_64 *)lc;
                                 if (strcmp(seg->segname, "__TEXT") == 0) {
+                                    printf("发现__TEXT段\n");
+                                    
                                     char path[1024];
                                     mach_vm_size_t path_len = sizeof(path);
                                     kr = vm_read_overwrite(target_task, seg->vmaddr, path_len, (vm_address_t)path, &bytes_read);
                                     
                                     if (kr == KERN_SUCCESS && bytes_read > 0) {
+                                        printf("读取路径: %s\n", path);
+                                        
                                         if (strstr(path, module_name) != NULL) {
+                                            printf("找到模块 %s，基地址: 0x%llx\n", module_name, address);
                                             return address;
                                         }
+                                    } else {
+                                        printf("无法读取路径，错误码: %d\n", kr);
                                     }
                                 }
                             }
                             lc = (struct load_command *)((char *)lc + lc->cmdsize);
                         }
+                    } else {
+                        printf("无效的Mach-O头\n");
                     }
+                } else {
+                    printf("无法读取内存，错误码: %d\n", kr);
                 }
             }
             address += size;
         }
     }
     
+    printf("未找到模块 %s\n", module_name);
     return 0;
 }
 
