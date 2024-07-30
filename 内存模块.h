@@ -65,13 +65,4 @@ int 写内存f64(vm_address_t address, double value);
 
 int 初始化内存模块(pid_t pid);
 void 关闭内存模块();
-
-MemoryReadResult 异步读任意地址(vm_address_t address, size_t size);
-int 异步写任意地址(vm_address_t address, const void* data, size_t size);
-
-int32_t 异步读内存i32(vm_address_t address);
-int64_t 异步读内存i64(vm_address_t address);
-float   异步读内存f32(vm_address_t address);
-double  异步读内存f64(vm_address_t address);
-
 #endif // MEMORY_MODULE_H
