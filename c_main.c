@@ -5,120 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <signal.h>
-#include <pthread.h>
-#include <unistd.h>
-#include <sys/mman.h>
 
 #define TARGET_PROCESS_NAME "pvz"
-#define START_ADDRESS 0x100000000ULL  // 从 4GB 开始
-#define END_ADDRESS   0x200000000ULL  // 到 8GB 结束
-#define THREAD_COUNT  4
-#define BATCH_SIZE    (1024 * 1024)   // 1MB 批量读取
-#define MAX_RESULTS   1000            // 最大结果数
-
-volatile sig_atomic_t keep_running = 1;
-
-typedef struct {
-    vm_address_t address;
-    int32_t value;
-} ScanResult;
-
-typedef struct {
-    vm_address_t start;
-    vm_address_t end;
-    ScanResult* results;
-    int result_count;
-    pthread_mutex_t* mutex;
-} ScanRange;
-
-void intHandler(int dummy) {
-    keep_running = 0;
-}
-
-void* scan_thread(void* arg) {
-    ScanRange* range = (ScanRange*)arg;
-    vm_address_t current = range->start;
-    int32_t* buffer = malloc(BATCH_SIZE);
-
-    while (current < range->end && keep_running) {
-        size_t batch_size = (range->end - current < BATCH_SIZE) ? range->end - current : BATCH_SIZE;
-        
-        if (读任意地址(current, buffer, batch_size) != NULL) {
-            for (size_t i = 0; i < batch_size / sizeof(int32_t); i++) {
-                if (buffer[i] > 100) {
-                    pthread_mutex_lock(range->mutex);
-                    if (range->result_count < MAX_RESULTS) {
-                        range->results[range->result_count].address = current + i * sizeof(int32_t);
-                        range->results[range->result_count].value = buffer[i];
-                        range->result_count++;
-                    }
-                    pthread_mutex_unlock(range->mutex);
-                }
-            }
-        }
-
-        current += batch_size;
-
-        // 每扫描 100MB 输出一次进度
-        if (current % (100 * 1024 * 1024) == 0) {
-            printf("线程 %lu 进度: 0x%llx (%.2f%%)\n", 
-                   (unsigned long)pthread_self(), 
-                   (unsigned long long)current, 
-                   (float)(current - range->start) / (range->end - range->start) * 100);
-        }
-    }
-
-    free(buffer);
-    return NULL;
-}
-
-void 扫描内存范围() {
-    printf("开始多线程扫描内存范围 0x%llx 到 0x%llx\n", START_ADDRESS, END_ADDRESS);
-
-    signal(SIGINT, intHandler);
-
-    pthread_t threads[THREAD_COUNT];
-    ScanRange ranges[THREAD_COUNT];
-    vm_address_t range_size = (END_ADDRESS - START_ADDRESS) / THREAD_COUNT;
-    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-
-    ScanResult* all_results = malloc(MAX_RESULTS * sizeof(ScanResult) * THREAD_COUNT);
-
-    for (int i = 0; i < THREAD_COUNT; i++) {
-        ranges[i].start = START_ADDRESS + i * range_size;
-        ranges[i].end = (i == THREAD_COUNT - 1) ? END_ADDRESS : ranges[i].start + range_size;
-        ranges[i].results = &all_results[i * MAX_RESULTS];
-        ranges[i].result_count = 0;
-        ranges[i].mutex = &mutex;
-        pthread_create(&threads[i], NULL, scan_thread, &ranges[i]);
-    }
-
-    for (int i = 0; i < THREAD_COUNT; i++) {
-        pthread_join(threads[i], NULL);
-    }
-
-    if (!keep_running) {
-        printf("\n扫描被用户中断\n");
-    } else {
-        printf("内存扫描完成\n");
-    }
-
-    // 打印结果
-    printf("\n扫描结果：\n");
-    int total_results = 0;
-    for (int i = 0; i < THREAD_COUNT; i++) {
-        for (int j = 0; j < ranges[i].result_count; j++) {
-            printf("地址: 0x%llx, 值: %d\n", 
-                   (unsigned long long)ranges[i].results[j].address, 
-                   ranges[i].results[j].value);
-            total_results++;
-        }
-    }
-    printf("共找到 %d 个结果\n", total_results);
-
-    free(all_results);
-}
 
 int c_main() {
     pid_t target_pid = get_pid_by_name(TARGET_PROCESS_NAME);
@@ -136,8 +24,60 @@ int c_main() {
 
     printf("内存模块初始化成功\n");
 
-    printf("开始执行内存扫描。按 Ctrl+C 随时中断。\n");
-    扫描内存范围();
+    // 测试读写不同类型的内存
+    vm_address_t test_address = 0x1060E1388; // 假设这是一个有效的内存地址
+
+    // 测试 int32
+    int32_t write_value_i32 = 42;
+    if (写内存i32(test_address, write_value_i32) == 0) {
+        int32_t read_value_i32 = 读内存i32(test_address);
+        printf("写入 int32: %d, 读取 int32: %d\n", write_value_i32, read_value_i32);
+    } else {
+        printf("写入 int32 失败\n");
+    }
+
+    // 测试 int64
+    int64_t write_value_i64 = 1234567890123LL;
+    if (写内存i64(test_address, write_value_i64) == 0) {
+        int64_t read_value_i64 = 读内存i64(test_address);
+        printf("写入 int64: %lld, 读取 int64: %lld\n", write_value_i64, read_value_i64);
+    } else {
+        printf("写入 int64 失败\n");
+    }
+
+    // 测试 float
+    float write_value_f32 = 3.14159f;
+    if (写内存f32(test_address, write_value_f32) == 0) {
+        float read_value_f32 = 读内存f32(test_address);
+        printf("写入 float: %f, 读取 float: %f\n", write_value_f32, read_value_f32);
+    } else {
+        printf("写入 float 失败\n");
+    }
+
+    // 测试 double
+    double write_value_f64 = 2.71828182845904523536;
+    if (写内存f64(test_address, write_value_f64) == 0) {
+        double read_value_f64 = 读内存f64(test_address);
+        printf("写入 double: %lf, 读取 double: %lf\n", write_value_f64, read_value_f64);
+    } else {
+        printf("写入 double 失败\n");
+    }
+
+    // 测试读写任意地址
+    const char* test_string = "Hello, World!";
+    size_t test_string_length = strlen(test_string) + 1; // 包括空字符
+
+    if (写任意地址(0x200000000, test_string, test_string_length) == 0) {
+        char* read_string = (char*)读任意地址(0x200000000, test_string_length);
+        if (read_string) {
+            printf("写入字符串: %s\n读取字符串: %s\n", test_string, read_string);
+            free(read_string);  // 释放读取的字符串内存
+        } else {
+            printf("读取字符串失败\n");
+        }
+    } else {
+        printf("写入字符串失败\n");
+    }
 
     关闭内存模块();
     printf("内存模块已关闭\n");
