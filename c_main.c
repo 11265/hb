@@ -5,36 +5,83 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <sys/mman.h>
 
 #define TARGET_PROCESS_NAME "pvz"
-#define START_ADDRESS 0x00000000000
-#define END_ADDRESS   0x20000000000
+#define START_ADDRESS 0x100000000ULL  // 从 4GB 开始
+#define END_ADDRESS   0x200000000ULL  // 到 8GB 结束
+#define THREAD_COUNT  4
+#define BATCH_SIZE    (1024 * 1024)   // 1MB 批量读取
 
-int 是否有效地址(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(int32_t));
-    if (data) {
-        内存池释放(data);
-        return 1;
+volatile sig_atomic_t keep_running = 1;
+
+void intHandler(int dummy) {
+    keep_running = 0;
+}
+
+typedef struct {
+    vm_address_t start;
+    vm_address_t end;
+} ScanRange;
+
+void* scan_thread(void* arg) {
+    ScanRange* range = (ScanRange*)arg;
+    vm_address_t current = range->start;
+    int32_t* buffer = malloc(BATCH_SIZE);
+
+    while (current < range->end && keep_running) {
+        size_t batch_size = (range->end - current < BATCH_SIZE) ? range->end - current : BATCH_SIZE;
+        
+        if (读任意地址(current, buffer, batch_size) == 0) {
+            for (size_t i = 0; i < batch_size / sizeof(int32_t); i++) {
+                if (buffer[i] > 1000000) {
+                    printf("地址: 0x%llx, 值: %d\n", (unsigned long long)(current + i * sizeof(int32_t)), buffer[i]);
+                }
+            }
+        }
+
+        current += batch_size;
+
+        // 每扫描 100MB 输出一次进度
+        if (current % (100 * 1024 * 1024) == 0) {
+            printf("线程 %lu 进度: 0x%llx (%.2f%%)\n", 
+                   (unsigned long)pthread_self(), 
+                   (unsigned long long)current, 
+                   (float)(current - range->start) / (range->end - range->start) * 100);
+        }
     }
-    return 0;
+
+    free(buffer);
+    return NULL;
 }
 
 void 扫描内存范围() {
-    printf("开始扫描内存范围 0x%llx 到 0x%llx\n", START_ADDRESS, END_ADDRESS);
+    printf("开始多线程扫描内存范围 0x%llx 到 0x%llx\n", START_ADDRESS, END_ADDRESS);
 
-    for (vm_address_t address = START_ADDRESS; address < END_ADDRESS; address += sizeof(int32_t)) {
-        if (是否有效地址(address)) {
-            int32_t value = 读内存i32(address);
-            printf("地址: 0x%llx, 值: %d\n", (unsigned long long)address, value);
-        }
-        
-        // 每扫描 100MB 输出一次进度
-        if (address % (100 * 1024 * 1024) == 0) {
-            printf("当前进度: 0x%llx (%.2f%%)\n", (unsigned long long)address, (float)address / END_ADDRESS * 100);
-        }
+    signal(SIGINT, intHandler);
+
+    pthread_t threads[THREAD_COUNT];
+    ScanRange ranges[THREAD_COUNT];
+    vm_address_t range_size = (END_ADDRESS - START_ADDRESS) / THREAD_COUNT;
+
+    for (int i = 0; i < THREAD_COUNT; i++) {
+        ranges[i].start = START_ADDRESS + i * range_size;
+        ranges[i].end = (i == THREAD_COUNT - 1) ? END_ADDRESS : ranges[i].start + range_size;
+        pthread_create(&threads[i], NULL, scan_thread, &ranges[i]);
     }
 
-    printf("内存扫描完成\n");
+    for (int i = 0; i < THREAD_COUNT; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    if (!keep_running) {
+        printf("\n扫描被用户中断\n");
+    } else {
+        printf("内存扫描完成\n");
+    }
 }
 
 int c_main() {
@@ -53,49 +100,8 @@ int c_main() {
 
     printf("内存模块初始化成功\n");
 
-    // 测试读写不同类型的内存
-    vm_address_t test_address = 0x1060E1388; // 假设这是一个有效的内存地址
-
-    // 测试 int32
-    int32_t write_value_i32 = 42;
-    if (写内存i32(test_address, write_value_i32) == 0) {
-        int32_t read_value_i32 = 读内存i32(test_address);
-        printf("int32 测试: 写入 %d, 读取 %d\n", write_value_i32, read_value_i32);
-    } else {
-        printf("int32 写入失败\n");
-    }
-
-    // 测试 float
-    float write_value_f32 = 3.14f;
-    if (写内存f32(test_address, write_value_f32) == 0) {
-        float read_value_f32 = 读内存f32(test_address);
-        printf("float 测试: 写入 %f, 读取 %f\n", write_value_f32, read_value_f32);
-    } else {
-        printf("float 写入失败\n");
-    }
-
-    // 测试任意大小的内存读写
-    char write_buffer[] = "Hello, World!";
-    size_t buffer_size = sizeof(write_buffer);
-    if (写任意地址(test_address, write_buffer, buffer_size) == 0) {
-        char* read_buffer = (char*)读任意地址(test_address, buffer_size);
-        if (read_buffer) {
-            printf("任意大小测试: 写入 '%s', 读取 '%s'\n", write_buffer, read_buffer);
-            内存池释放(read_buffer);
-        } else {
-            printf("任意大小读取失败\n");
-        }
-    } else {
-        printf("任意大小写入失败\n");
-    }
-
-    // 添加新的内存扫描功能
-    printf("是否要执行内存扫描? (y/n): ");
-    char response;
-    scanf(" %c", &response);
-    if (response == 'y' || response == 'Y') {
-        扫描内存范围();
-    }
+    printf("开始执行内存扫描。按 Ctrl+C 随时中断。\n");
+    扫描内存范围();
 
     关闭内存模块();
     printf("内存模块已关闭\n");
