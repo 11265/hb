@@ -22,37 +22,18 @@ int c_main(void) {
 
     vm_address_t test_address = 0x12345000; // 示例地址，请根据实际情况修改
 
-    // 测试写入和读取各种数据类型
-    int32_t test_i32 = 42;
-    写内存i32(test_address, test_i32);
-    printf("写入 int32: %d, 读取 int32: %d\n", test_i32, 读内存i32(test_address));
+    // 读取其他数据类型
+    printf("读取 int32: %d\n", 读内存i32(test_address));
 
-    int64_t test_i64 = 1234567890123LL;
-    写内存i64(test_address, test_i64);
-    printf("写入 int64: %lld, 读取 int64: %lld\n", test_i64, 读内存i64(test_address));
-
-    float test_f32 = 3.14159f;
-    写内存f32(test_address, test_f32);
-    printf("写入 float: %f, 读取 float: %f\n", test_f32, 读内存f32(test_address));
-
-    double test_f64 = 2.71828182845904;
-    写内存f64(test_address, test_f64);
-    printf("写入 double: %f, 读取 double: %f\n", test_f64, 读内存f64(test_address));
-
-    // 测试写入和读取字符串
-    const char* test_string = "Hello, World!";
-    写任意地址(test_address, test_string, strlen(test_string) + 1);
-    printf("写入字符串: %s\n", test_string);
-
-    MemoryReadResult result = 读任意地址(test_address, strlen(test_string) + 1);
-    if (result.data) {
-        printf("读取字符串: %s\n", (char*)result.data);
-        if (result.from_pool) {
-            内存池释放(&memory_pool, result.data);
-        } else {
-            free(result.data);
-        }
+    // 测试写入和读取 int32_t
+    int32_t test_i32 = 12345;
+    if (写内存i32(test_address, test_i32) == 0) {
+        printf("写入 int32 成功: %d\n", test_i32);
+        printf("读取 int32: %d\n", 读内存i32(test_address));
+    } else {
+        printf("写入 int32 失败\n");
     }
+
 
     关闭内存模块();
     return 0;
