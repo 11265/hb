@@ -7,6 +7,8 @@
 #include <sys/mman.h>
 
 #define ALIGN4(size) (((size) + 3) & ~3)
+#define PAGE_SIZE 4096
+#define PAGE_MASK (~(PAGE_SIZE - 1))
 
 typedef struct {
     pthread_t thread;
@@ -215,7 +217,6 @@ MemoryReadResult 读任意地址(vm_address_t address, size_t size) {
 int 写任意地址(vm_address_t address, const void* data, size_t size) {
     MemoryRegion* region = get_or_create_page(address);
     if (!region) {
-        fprintf(stderr, "Failed to get or create page for address 0x%lx\n", address);
         return -1;
     }
     
@@ -225,24 +226,13 @@ int 写任意地址(vm_address_t address, const void* data, size_t size) {
         memcpy((char*)region->mapped_memory + offset, data, first_part);
         
         size_t remaining = size - first_part;
-        int result = 写任意地址(address + first_part, (char*)data + first_part, remaining);
-        if (result != 0) {
-            fprintf(stderr, "Failed to write remaining data at address 0x%lx\n", address + first_part);
-            return result;
-        }
+        return 写任意地址(address + first_part, (char*)data + first_part, remaining);
     } else {
         memcpy((char*)region->mapped_memory + offset, data, size);
+        return 0;
     }
-
-    // Attempt to write back the changes to the target process
-    kern_return_t kr = vm_write(target_task, region->base_address, (vm_offset_t)region->mapped_memory, region->mapped_size);
-    if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "Failed to write memory back to target process. Error: %d\n", kr);
-        return -2;
-    }
-
-    return 0;
 }
+
 int32_t 读内存i32(vm_address_t address) {
     MemoryReadResult result = 读任意地址(address, sizeof(int32_t));
     if (!result.data) {
@@ -384,4 +374,98 @@ void 关闭内存模块() {
     
     free(cached_regions);
     销毁内存池(&memory_pool);
+}
+
+static int add_request(vm_address_t address, size_t size, void* buffer, int operation, void* result) {
+    pthread_mutex_lock(&requests_mutex);
+    
+    if (num_pending_requests >= MAX_PENDING_REQUESTS) {
+        pthread_mutex_unlock(&requests_mutex);
+        return -1;
+    }
+    
+    pending_requests[num_pending_requests].address = address;
+    pending_requests[num_pending_requests].size = size;
+    pending_requests[num_pending_requests].buffer = buffer;
+    pending_requests[num_pending_requests].operation = operation;
+    pending_requests[num_pending_requests].result = result;
+    
+    num_pending_requests++;
+    
+    pthread_cond_signal(&request_cond);
+    pthread_mutex_unlock(&requests_mutex);
+    
+    return 0;
+}
+
+MemoryReadResult 异步读任意地址(vm_address_t address, size_t size) {
+    MemoryReadResult result = {NULL, 0};
+    if (add_request(address, size, NULL, 0, &result) != 0) {
+        return result;
+    }
+    return result;
+}
+
+int 异步写任意地址(vm_address_t address, const void* data, size_t size) {
+    int result = -1;
+    if (add_request(address, size, (void*)data, 1, &result) != 0) {
+        return -1;
+    }
+    return result;
+}
+
+int32_t 异步读内存i32(vm_address_t address) {
+    MemoryReadResult result = 异步读任意地址(address, sizeof(int32_t));
+    if (!result.data) {
+        return 0;
+    }
+    int32_t value = *(int32_t*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
+}
+
+int64_t 异步读内存i64(vm_address_t address) {
+    MemoryReadResult result = 异步读任意地址(address, sizeof(int64_t));
+    if (!result.data) {
+        return 0;
+    }
+    int64_t value = *(int64_t*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
+}
+
+float 异步读内存f32(vm_address_t address) {
+    MemoryReadResult result = 异步读任意地址(address, sizeof(float));
+    if (!result.data) {
+        return 0.0f;
+    }
+    float value = *(float*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
+}
+
+double 异步读内存f64(vm_address_t address) {
+    MemoryReadResult result = 异步读任意地址(address, sizeof(double));
+    if (!result.data) {
+        return 0.0;
+    }
+    double value = *(double*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
 }
