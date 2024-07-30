@@ -8,8 +8,6 @@
 #include <time.h>
 
 #define ALIGN4(size) (((size) + 3) & ~3)
-#define PAGE_SIZE 4096
-#define PAGE_MASK (~(PAGE_SIZE - 1))
 
 typedef struct {
     pthread_t thread;
@@ -151,31 +149,23 @@ MemoryRegion* get_or_create_page(vm_address_t address) {
     return &cached_regions[num_cached_regions - 1];
 }
 
-void* 读任意地址(vm_address_t address, size_t size) {
+void* 读任意地址(vm_address_t address, void* buffer, size_t size) {
     MemoryRegion* region = get_or_create_page(address);
     if (!region) {
         return NULL;
     }
     
     size_t offset = address - region->base_address;
-    void* buffer = 内存池分配(size);
-    if (!buffer) {
-        return NULL;
-    }
     
     if (offset + size > PAGE_SIZE) {
         size_t first_part = PAGE_SIZE - offset;
         memcpy(buffer, (char*)region->mapped_memory + offset, first_part);
         
         size_t remaining = size - first_part;
-        void* remaining_data = 读任意地址(address + first_part, remaining);
+        void* remaining_data = 读任意地址(address + first_part, (char*)buffer + first_part, remaining);
         if (!remaining_data) {
-            内存池释放(buffer);
             return NULL;
         }
-        
-        memcpy((char*)buffer + first_part, remaining_data, remaining);
-        内存池释放(remaining_data);
     } else {
         memcpy(buffer, (char*)region->mapped_memory + offset, size);
     }
@@ -203,42 +193,34 @@ int 写任意地址(vm_address_t address, const void* data, size_t size) {
 }
 
 int32_t 读内存i32(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(int32_t));
-    if (!data) {
+    int32_t result;
+    if (读任意地址(address, &result, sizeof(int32_t)) == NULL) {
         return 0;
     }
-    int32_t result = *(int32_t*)data;
-    内存池释放(data);
     return result;
 }
 
 int64_t 读内存i64(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(int64_t));
-    if (!data) {
+    int64_t result;
+    if (读任意地址(address, &result, sizeof(int64_t)) == NULL) {
         return 0;
     }
-    int64_t result = *(int64_t*)data;
-    内存池释放(data);
     return result;
 }
 
 float 读内存f32(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(float));
-    if (!data) {
+    float result;
+    if (读任意地址(address, &result, sizeof(float)) == NULL) {
         return 0.0f;
     }
-    float result = *(float*)data;
-    内存池释放(data);
     return result;
 }
 
 double 读内存f64(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(double));
-    if (!data) {
+    double result;
+    if (读任意地址(address, &result, sizeof(double)) == NULL) {
         return 0.0;
     }
-    double result = *(double*)data;
-    内存池释放(data);
     return result;
 }
 
@@ -276,7 +258,7 @@ void* 处理内存请求(void* arg) {
         pthread_mutex_unlock(&requests_mutex);
         
         if (request.operation == 0) { // Read operation
-            request.result = 读任意地址(request.address, request.size);
+            request.result = 读任意地址(request.address, request.buffer, request.size);
         } else { // Write operation
             request.result = (void*)(intptr_t)写任意地址(request.address, request.buffer, request.size);
         }
