@@ -14,6 +14,6 @@ typedef struct kinfo_proc kinfo_proc;
 static int get_proc_list(kinfo_proc **procList, size_t *procCount);
 
 // 根据进程名获取PID
-pid_t get_pid_by_name(const char *process_name);
+pid_t 根据进程名获取PID(const char *process_name);
 
 #endif // PROCESS_UTILS_H
