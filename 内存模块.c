@@ -295,7 +295,13 @@ void* worker_thread(void* arg) {
         if (has_request) {
             switch (request.operation) {
                 case 0: // Read
-                    request.result = 读任意地址(request.address, request.size);
+                    request.result = 内存分配(request.size);  // 分配内存作为缓冲区
+                    if (request.result) {
+                        if (读任意地址(request.address, request.result, request.size) == NULL) {
+                            内存释放(request.result);  // 如果读取失败，释放内存
+                            request.result = NULL;
+                        }
+                    }
                     break;
                 case 1: // Write
                     request.result = (void*)(intptr_t)写任意地址(request.address, request.buffer, request.size);
@@ -306,7 +312,6 @@ void* worker_thread(void* arg) {
     
     return NULL;
 }
-
 int 初始化内存模块(pid_t pid) {
     target_pid = pid;
     kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &target_task);
