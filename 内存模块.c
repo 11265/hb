@@ -166,51 +166,49 @@ MemoryReadResult 读任意地址(vm_address_t address, size_t size) {
     MemoryReadResult result = {NULL, 0};
     MemoryRegion* region = get_or_create_page(address);
     if (!region) {
+        printf("无法获取或创建内存页，地址：0x%lx\n", address);
         return result;
     }
     
     size_t offset = address - region->base_address;
-    void* buffer;
-    int use_memory_pool = (size <= SMALL_ALLOCATION_THRESHOLD);
-    if (use_memory_pool) {
-        buffer = 内存池分配(&memory_pool, size);
-    }
+    void* buffer = malloc(size);
     if (!buffer) {
-        buffer = malloc(size);
-        use_memory_pool = 0;
-    }
-    
-    if (!buffer) {
+        printf("内存分配失败，大小：%zu\n", size);
         return result;
     }
     
     if (offset + size > PAGE_SIZE) {
         size_t first_part = PAGE_SIZE - offset;
-        memcpy(buffer, (char*)region->mapped_memory + offset, first_part);
+        mach_vm_size_t bytes_read;
+        kern_return_t kr = vm_read_overwrite(target_task, region->base_address + offset, first_part, (vm_address_t)buffer, &bytes_read);
+        if (kr != KERN_SUCCESS || bytes_read != first_part) {
+            printf("读取第一部分失败，错误码：%d，读取字节：%zu\n", kr, bytes_read);
+            free(buffer);
+            return result;
+        }
         
         size_t remaining = size - first_part;
         MemoryReadResult remaining_result = 读任意地址(address + first_part, remaining);
         if (!remaining_result.data) {
-            if (use_memory_pool) {
-                内存池释放(&memory_pool, buffer);
-            } else {
-                free(buffer);
-            }
+            printf("读取剩余部分失败\n");
+            free(buffer);
             return result;
         }
         
         memcpy((char*)buffer + first_part, remaining_result.data, remaining);
-        if (remaining_result.from_pool) {
-            内存池释放(&memory_pool, remaining_result.data);
-        } else {
-            free(remaining_result.data);
-        }
+        free(remaining_result.data);
     } else {
-        memcpy(buffer, (char*)region->mapped_memory + offset, size);
+        mach_vm_size_t bytes_read;
+        kern_return_t kr = vm_read_overwrite(target_task, region->base_address + offset, size, (vm_address_t)buffer, &bytes_read);
+        if (kr != KERN_SUCCESS || bytes_read != size) {
+            printf("读取失败，错误码：%d，读取字节：%zu\n", kr, bytes_read);
+            free(buffer);
+            return result;
+        }
     }
     
     result.data = buffer;
-    result.from_pool = use_memory_pool;
+    result.from_pool = 0;
     return result;
 }
 
