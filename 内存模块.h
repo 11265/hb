@@ -11,6 +11,8 @@
 #define MAX_PENDING_REQUESTS 1000
 #define MEMORY_POOL_SIZE (10 * 1024 * 1024)  // 10MB 内存池
 #define SMALL_ALLOCATION_THRESHOLD 256  // 小于此值的分配使用内存池
+// 在 "内存模块.h" 文件中添加以下声明
+extern MemoryPool memory_pool;
 
 typedef struct {
     vm_address_t base_address;
