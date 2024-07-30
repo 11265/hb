@@ -23,18 +23,19 @@ int c_main(void) {
 
     vm_address_t test_address = 0x106befe70; // 示例地址，请根据实际情况修改
 
-    // 读取各种数据类型
-    // int32_t
+
+
+    // 读取其他数据类型
     printf("读取 int32: %d\n", 读内存i32(test_address));
 
-    // int64_t
-    printf("读取 int64: %lld\n", 读内存i64(test_address));
-
-    // float
-    printf("读取 float: %f\n", 读内存f32(test_address));
-
-    // double
-    printf("读取 double: %.14f\n", 读内存f64(test_address));
+    // 测试写入和读取 int32_t
+    int32_t test_i32 = 12345;
+    if (写内存i32(test_address, test_i32) == 0) {
+        printf("写入 int32 成功: %d\n", test_i32);
+        printf("读取 int32: %d\n", 读内存i32(test_address));
+    } else {
+        printf("写入 int32 失败\n");
+    }
 
     关闭内存模块();
     return 0;
