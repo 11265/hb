@@ -31,6 +31,7 @@ int c_main(void) {
     } else {
         printf("未找到模块 'pvz'\n");
         关闭内存模块();
+        printf("关闭内存模块 'pvz'\n");
         return 1;
     }
 /*
