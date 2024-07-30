@@ -7,8 +7,6 @@
 #include <pthread.h>
 
 #define ALIGN4(size) (((size) + 3) & ~3)
-#define PAGE_SIZE 4096
-#define PAGE_MASK (~(PAGE_SIZE - 1))
 #define LARGE_MAPPING_THRESHOLD (1024 * 1024)  // 1MB threshold for large mappings
 
 #define MEMORY_POOL_SIZE (1024 * 1024)  // 1MB memory pool
@@ -194,20 +192,15 @@ MemoryRegion* get_or_create_mapping(vm_address_t address, size_t size) {
     return &cached_regions[num_cached_regions - 1];
 }
 
-void* 读任意地址(vm_address_t address, size_t size) {
+void* 读任意地址(vm_address_t address, void* buffer, size_t size) {
     MemoryRegion* region = get_or_create_mapping(address, size);
     if (!region) {
         return NULL;
     }
     
     size_t offset = address - region->base_address;
-    void* buffer = 内存分配(size);
-    
-    if (!buffer) {
-        return NULL;
-    }
-    
     memcpy(buffer, (char*)region->mapped_memory + offset, size);
+    
     return buffer;
 }
 
