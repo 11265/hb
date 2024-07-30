@@ -337,7 +337,7 @@ int 初始化内存模块(pid_t pid) {
             vm_prot_t new_protection = info.protection | VM_PROT_WRITE;
             kr = vm_protect(target_task, address, size, FALSE, new_protection);
             if (kr != KERN_SUCCESS) {
-                printf("无法修改地址处的内存保护 0x%llx\n", (unsigned long long)address);
+                //printf("无法修改地址处的内存保护 0x%llx\n", (unsigned long long)address);
             }
         }
 
