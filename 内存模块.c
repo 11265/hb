@@ -6,13 +6,9 @@
 #include <time.h>
 #include <pthread.h>
 #include <mach/mach.h>
-
-#define NUM_THREADS 4
-#define INITIAL_CACHED_REGIONS 100
+#include <mach/vm_map.h>
 
 #define ALIGN4(size) (((size) + 3) & ~3)
-#define PAGE_SIZE 4096
-#define PAGE_MASK (~(PAGE_SIZE - 1))
 
 typedef struct {
     pthread_t thread;
@@ -35,11 +31,10 @@ static int num_pending_requests = 0;
 static int stop_threads = 0;
 
 MemoryRegion* get_or_create_page(vm_address_t address) {
-    vm_address_t page_address = address & PAGE_MASK;
+    vm_address_t page_address = address & (vm_page_size - 1);
     
     pthread_mutex_lock(&regions_mutex);
     
-    // 查找现有的页面
     for (int i = 0; i < num_cached_regions; i++) {
         if (cached_regions[i].base_address == page_address) {
             cached_regions[i].access_count++;
@@ -49,9 +44,7 @@ MemoryRegion* get_or_create_page(vm_address_t address) {
         }
     }
     
-    // 如果没有找到，创建新的页面
     if (num_cached_regions >= max_cached_regions) {
-        // 如果缓存已满，移除最少使用的页面
         int least_used_index = 0;
         uint32_t least_used_count = UINT32_MAX;
         time_t oldest_access = time(NULL);
@@ -72,24 +65,23 @@ MemoryRegion* get_or_create_page(vm_address_t address) {
         num_cached_regions--;
     }
     
-    // 映射新页面
-    void* mapped_memory = mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void* mapped_memory = mmap(NULL, vm_page_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (mapped_memory == MAP_FAILED) {
         pthread_mutex_unlock(&regions_mutex);
         return NULL;
     }
     
     mach_vm_size_t bytes_read;
-    kern_return_t kr = vm_read_overwrite(target_task, page_address, PAGE_SIZE, (vm_address_t)mapped_memory, &bytes_read);
-    if (kr != KERN_SUCCESS || bytes_read != PAGE_SIZE) {
-        munmap(mapped_memory, PAGE_SIZE);
+    kern_return_t kr = vm_read_overwrite(target_task, page_address, vm_page_size, (vm_address_t)mapped_memory, &bytes_read);
+    if (kr != KERN_SUCCESS || bytes_read != vm_page_size) {
+        munmap(mapped_memory, vm_page_size);
         pthread_mutex_unlock(&regions_mutex);
         return NULL;
     }
     
     cached_regions[num_cached_regions].base_address = page_address;
     cached_regions[num_cached_regions].mapped_memory = mapped_memory;
-    cached_regions[num_cached_regions].mapped_size = PAGE_SIZE;
+    cached_regions[num_cached_regions].mapped_size = vm_page_size;
     cached_regions[num_cached_regions].access_count = 1;
     cached_regions[num_cached_regions].last_access = time(NULL);
     
@@ -106,17 +98,15 @@ void* 读任意地址(vm_address_t address, size_t size) {
     }
     
     size_t offset = address - region->base_address;
-    void* buffer = malloc(size);  // 总是分配新的内存
+    void* buffer = malloc(size);
     if (!buffer) {
         return NULL;
     }
     
-    if (offset + size > PAGE_SIZE) {
-        // 如果读取跨越了页面边界，我们需要分段读取
-        size_t first_part = PAGE_SIZE - offset;
+    if (offset + size > vm_page_size) {
+        size_t first_part = vm_page_size - offset;
         memcpy(buffer, (char*)region->mapped_memory + offset, first_part);
         
-        // 读取剩余部分
         size_t remaining = size - first_part;
         void* remaining_data = 读任意地址(address + first_part, remaining);
         if (!remaining_data) {
@@ -127,7 +117,6 @@ void* 读任意地址(vm_address_t address, size_t size) {
         memcpy((char*)buffer + first_part, remaining_data, remaining);
         free(remaining_data);
     } else {
-        // 如果读取没有跨越页面边界，直接复制数据
         memcpy(buffer, (char*)region->mapped_memory + offset, size);
     }
     
@@ -141,25 +130,20 @@ int 写任意地址(vm_address_t address, const void* data, size_t size) {
     }
     
     size_t offset = address - region->base_address;
-    if (offset + size > PAGE_SIZE) {
-        // 如果写入跨越了页面边界，我们需要分段写入
-        size_t first_part = PAGE_SIZE - offset;
+    if (offset + size > vm_page_size) {
+        size_t first_part = vm_page_size - offset;
         memcpy((char*)region->mapped_memory + offset, data, first_part);
         
-        // 写入第一部分到目标进程
         kern_return_t kr = vm_write(target_task, address, (vm_offset_t)data, first_part);
         if (kr != KERN_SUCCESS) {
             return -1;
         }
         
-        // 写入剩余部分
         size_t remaining = size - first_part;
         return 写任意地址(address + first_part, (char*)data + first_part, remaining);
     } else {
-        // 如果写入没有跨越页面边界，直接写入映射内存和目标进程
         memcpy((char*)region->mapped_memory + offset, data, size);
         
-        // 写入到目标进程
         kern_return_t kr = vm_write(target_task, address, (vm_offset_t)data, size);
         if (kr != KERN_SUCCESS) {
             return -1;
@@ -252,7 +236,7 @@ void* 处理内存请求(void* arg) {
             void* result = 读任意地址(request.address, request.size);
             if (result) {
                 memcpy(request.result, result, request.size);
-                if (result != (void*)((char*)get_or_create_page(request.address)->mapped_memory + (request.address & (PAGE_SIZE - 1)))) {
+                if (result != (void*)((char*)get_or_create_page(request.address)->mapped_memory + (request.address & (vm_page_size - 1)))) {
                     free(result);
                 }
             } else {
@@ -290,7 +274,6 @@ int 初始化内存模块(pid_t pid) {
         }
     }
     
-    // 初始化互斥锁和条件变量
     if (pthread_mutex_init(&regions_mutex, NULL) != 0 ||
         pthread_mutex_init(&requests_mutex, NULL) != 0 ||
         pthread_cond_init(&request_cond, NULL) != 0) {
@@ -298,20 +281,18 @@ int 初始化内存模块(pid_t pid) {
         return -1;
     }
     
-    // 设置目标进程的内存区域为可读写
     vm_address_t address = 0;
     vm_size_t size = 0;
     natural_t depth = 0;
     while (1) {
-        mach_vm_region_recurse_info_data_t info;
+        vm_region_submap_info_data_64_t info;
         mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_COUNT_64;
-        kr = mach_vm_region_recurse(target_task, &address, &size, &depth, (vm_region_recurse_info_t)&info, &count);
+        kr = vm_region_recurse_64(target_task, &address, &size, &depth, (vm_region_info_t)&info, &count);
         if (kr != KERN_SUCCESS) break;
 
-        // 修改内存区域为可读写
         kr = vm_protect(target_task, address, size, FALSE, VM_PROT_READ | VM_PROT_WRITE);
         if (kr != KERN_SUCCESS) {
-            printf("Warning: Failed to set memory protection for region at %llx: %s\n", address, mach_error_string(kr));
+            printf("Warning: Failed to set memory protection for region at %lx: %s\n", address, mach_error_string(kr));
         }
 
         address += size;
