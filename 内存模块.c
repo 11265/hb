@@ -6,6 +6,8 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <time.h>
+#include <errno.h>
+#include <mach/mach_error.h>
 
 #define PAGE_SIZE 4096
 #define PAGE_MASK (~(PAGE_SIZE - 1))
@@ -38,7 +40,16 @@ void 初始化内存池() {
 
     for (int i = 0; i < MEMORY_POOL_BLOCK_COUNT; i++) {
         MemoryBlock* block = (MemoryBlock*)malloc(sizeof(MemoryBlock));
+        if (block == NULL) {
+            fprintf(stderr, "Failed to allocate memory block\n");
+            continue;
+        }
         block->memory = malloc(MEMORY_POOL_BLOCK_SIZE);
+        if (block->memory == NULL) {
+            fprintf(stderr, "Failed to allocate memory for block\n");
+            free(block);
+            continue;
+        }
         block->next = memory_pool.free_blocks;
         memory_pool.free_blocks = block;
     }
@@ -86,6 +97,11 @@ void 清理内存池() {
 }
 
 MemoryRegion* get_or_create_page(vm_address_t address) {
+    if (address == 0) {
+        fprintf(stderr, "Invalid address: 0\n");
+        return NULL;
+    }
+
     vm_address_t page_address = address & PAGE_MASK;
     
     pthread_mutex_lock(&regions_mutex);
@@ -114,7 +130,9 @@ MemoryRegion* get_or_create_page(vm_address_t address) {
             }
         }
         
-        munmap(cached_regions[least_used_index].mapped_memory, cached_regions[least_used_index].mapped_size);
+        if (munmap(cached_regions[least_used_index].mapped_memory, cached_regions[least_used_index].mapped_size) != 0) {
+            fprintf(stderr, "Failed to unmap memory: %s\n", strerror(errno));
+        }
         memmove(&cached_regions[least_used_index], &cached_regions[least_used_index + 1], 
                 (num_cached_regions - least_used_index - 1) * sizeof(MemoryRegion));
         num_cached_regions--;
@@ -122,6 +140,7 @@ MemoryRegion* get_or_create_page(vm_address_t address) {
     
     void* mapped_memory = mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (mapped_memory == MAP_FAILED) {
+        fprintf(stderr, "mmap failed: %s\n", strerror(errno));
         pthread_mutex_unlock(&regions_mutex);
         return NULL;
     }
@@ -129,6 +148,7 @@ MemoryRegion* get_or_create_page(vm_address_t address) {
     mach_vm_size_t bytes_read;
     kern_return_t kr = vm_read_overwrite(target_task, page_address, PAGE_SIZE, (vm_address_t)mapped_memory, &bytes_read);
     if (kr != KERN_SUCCESS || bytes_read != PAGE_SIZE) {
+        fprintf(stderr, "vm_read_overwrite failed: %s\n", mach_error_string(kr));
         munmap(mapped_memory, PAGE_SIZE);
         pthread_mutex_unlock(&regions_mutex);
         return NULL;
@@ -147,8 +167,14 @@ MemoryRegion* get_or_create_page(vm_address_t address) {
 }
 
 void* 读任意地址(vm_address_t address, void* buffer, size_t size) {
+    if (address == 0 || buffer == NULL || size == 0) {
+        fprintf(stderr, "Invalid parameters in 读任意地址\n");
+        return NULL;
+    }
+
     MemoryRegion* region = get_or_create_page(address);
     if (!region) {
+        fprintf(stderr, "Failed to get or create page for address 0x%llx\n", address);
         return NULL;
     }
     
@@ -168,37 +194,50 @@ void* 读任意地址(vm_address_t address, void* buffer, size_t size) {
 }
 
 int 写任意地址(vm_address_t address, const void* data, size_t size) {
+    if (address == 0 || data == NULL || size == 0) {
+        fprintf(stderr, "Invalid parameters in 写任意地址\n");
+        return -1;
+    }
+
     kern_return_t kr = vm_write(target_task, address, (vm_offset_t)data, size);
-    return (kr == KERN_SUCCESS) ? 0 : -1;
+    if (kr != KERN_SUCCESS) {
+        fprintf(stderr, "vm_write failed: %s\n", mach_error_string(kr));
+        return -1;
+    }
+    return 0;
 }
 
 int32_t 读内存i32(vm_address_t address) {
-    int32_t value;
+    int32_t value = 0;
     if (读任意地址(address, &value, sizeof(value)) == NULL) {
+        fprintf(stderr, "Failed to read i32 at address 0x%llx\n", address);
         return 0;
     }
     return value;
 }
 
 int64_t 读内存i64(vm_address_t address) {
-    int64_t value;
+    int64_t value = 0;
     if (读任意地址(address, &value, sizeof(value)) == NULL) {
+        fprintf(stderr, "Failed to read i64 at address 0x%llx\n", address);
         return 0;
     }
     return value;
 }
 
 float 读内存f32(vm_address_t address) {
-    float value;
+    float value = 0.0f;
     if (读任意地址(address, &value, sizeof(value)) == NULL) {
+        fprintf(stderr, "Failed to read f32 at address 0x%llx\n", address);
         return 0.0f;
     }
     return value;
 }
 
 double 读内存f64(vm_address_t address) {
-    double value;
+    double value = 0.0;
     if (读任意地址(address, &value, sizeof(value)) == NULL) {
+        fprintf(stderr, "Failed to read f64 at address 0x%llx\n", address);
         return 0.0;
     }
     return value;
@@ -241,8 +280,15 @@ void* 处理内存请求(void* arg) {
         if (have_request) {
             if (request.operation == 0) {  // 读操作
                 request.result = 读任意地址(request.address, request.buffer, request.size);
+                if (request.result == NULL) {
+                    fprintf(stderr, "Thread %d: 读取地址 0x%llx 失败\n", info->id, request.address);
+                }
             } else {  // 写操作
-                request.result = (void*)(intptr_t)写任意地址(request.address, request.buffer, request.size);
+                int write_result = 写任意地址(request.address, request.buffer, request.size);
+                request.result = (void*)(intptr_t)write_result;
+                if (write_result != 0) {
+                    fprintf(stderr, "Thread %d: 写入地址 0x%llx 失败\n", info->id, request.address);
+                }
             }
         }
     }
@@ -254,11 +300,13 @@ int 初始化内存模块(pid_t pid) {
     target_pid = pid;
     kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &target_task);
     if (kr != KERN_SUCCESS) {
+        fprintf(stderr, "Failed to get task for pid %d: %s\n", pid, mach_error_string(kr));
         return -1;
     }
     
     cached_regions = (MemoryRegion*)malloc(sizeof(MemoryRegion) * max_cached_regions);
     if (cached_regions == NULL) {
+        fprintf(stderr, "Failed to allocate memory for cached regions\n");
         return -1;
     }
     
@@ -266,7 +314,10 @@ int 初始化内存模块(pid_t pid) {
     
     for (int i = 0; i < NUM_THREADS; i++) {
         thread_pool[i].id = i;
-        pthread_create(&thread_pool[i].thread, NULL, 处理内存请求, &thread_pool[i]);
+        if (pthread_create(&thread_pool[i].thread, NULL, 处理内存请求, &thread_pool[i]) != 0) {
+            fprintf(stderr, "Failed to create thread %d\n", i);
+            return -1;
+        }
     }
     
     return 0;
@@ -281,7 +332,9 @@ void 关闭内存模块() {
     }
     
     for (int i = 0; i < num_cached_regions; i++) {
-        munmap(cached_regions[i].mapped_memory, cached_regions[i].mapped_size);
+        if (munmap(cached_regions[i].mapped_memory, cached_regions[i].mapped_size) != 0) {
+            fprintf(stderr, "Failed to unmap memory for region %d: %s\n", i, strerror(errno));
+        }
     }
     
     free(cached_regions);
