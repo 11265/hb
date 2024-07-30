@@ -44,7 +44,7 @@ void* scan_thread(void* arg) {
     while (current < range->end && keep_running) {
         size_t batch_size = (range->end - current < BATCH_SIZE) ? range->end - current : BATCH_SIZE;
         
-        if (读任意地址(current, buffer, batch_size) == 0) {
+        if (读任意地址(current, buffer, batch_size) != NULL) {
             for (size_t i = 0; i < batch_size / sizeof(int32_t); i++) {
                 if (buffer[i] > 100) {
                     pthread_mutex_lock(range->mutex);
