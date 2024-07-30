@@ -69,9 +69,13 @@ void 内存池释放(void* ptr) {
     }
 
     pthread_mutex_lock(&memory_pool.mutex);
-    MemoryBlock* block = (MemoryBlock*)((char*)ptr - sizeof(MemoryBlock));
-    block->next = memory_pool.free_blocks;
-    memory_pool.free_blocks = block;
+    if ((uintptr_t)ptr % MEMORY_POOL_BLOCK_SIZE == 0) {
+        MemoryBlock* block = (MemoryBlock*)((char*)ptr - sizeof(MemoryBlock));
+        block->next = memory_pool.free_blocks;
+        memory_pool.free_blocks = block;
+    } else {
+        free(ptr);  // 如果不是来自我们的池，使用常规的 free
+    }
     pthread_mutex_unlock(&memory_pool.mutex);
 }
 
