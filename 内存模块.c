@@ -4,16 +4,6 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <time.h>
-#include <pthread.h>
-
-#define ALIGN4(size) (((size) + 3) & ~3)
-#define PAGE_SIZE 4096
-#define PAGE_MASK (~(PAGE_SIZE - 1))
-
-typedef struct {
-    pthread_t thread;
-    int id;
-} ThreadInfo;
 
 static MemoryRegion *cached_regions = NULL;
 static int num_cached_regions = 0;
@@ -21,33 +11,51 @@ static int max_cached_regions = INITIAL_CACHED_REGIONS;
 static pid_t target_pid;
 static task_t target_task;
 
-static ThreadInfo thread_pool[NUM_THREADS];
+static pthread_t mapper_thread;
 static pthread_mutex_t regions_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t requests_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t request_cond = PTHREAD_COND_INITIALIZER;
 
 static MemoryRequest pending_requests[MAX_PENDING_REQUESTS];
 static int num_pending_requests = 0;
-static int stop_threads = 0;
 
-MemoryRegion* get_or_create_page(vm_address_t address) {
-    vm_address_t page_address = address & PAGE_MASK;
-    
+static MemoryRegion* find_cached_region(vm_address_t address) {
     pthread_mutex_lock(&regions_mutex);
-    
-    // 查找现有的页面
     for (int i = 0; i < num_cached_regions; i++) {
-        if (cached_regions[i].base_address == page_address) {
+        if (address >= cached_regions[i].base_address && 
+            address < cached_regions[i].base_address + cached_regions[i].mapped_size) {
             cached_regions[i].access_count++;
             cached_regions[i].last_access = time(NULL);
             pthread_mutex_unlock(&regions_mutex);
             return &cached_regions[i];
         }
     }
+    pthread_mutex_unlock(&regions_mutex);
+    return NULL;
+}
+
+static void adjust_cache_size() {
+    if (num_cached_regions == max_cached_regions) {
+        if (max_cached_regions < MAX_CACHED_REGIONS) {
+            max_cached_regions++;
+            cached_regions = realloc(cached_regions, max_cached_regions * sizeof(MemoryRegion));
+        }
+    } else if (num_cached_regions < max_cached_regions / 2 && max_cached_regions > MIN_CACHED_REGIONS) {
+        max_cached_regions--;
+        cached_regions = realloc(cached_regions, max_cached_regions * sizeof(MemoryRegion));
+    }
+}
+
+static int map_new_region(vm_address_t address) {
+    kern_return_t kr;
+    vm_address_t region_start = address & ~(REGION_SIZE - 1);
+    vm_size_t size = REGION_SIZE;
+    mach_vm_size_t bytes_read;
+
+    pthread_mutex_lock(&regions_mutex);
+    adjust_cache_size();
     
-    // 如果没有找到，创建新的页面
     if (num_cached_regions >= max_cached_regions) {
-        // 如果缓存已满，移除最少使用的页面
         int least_used_index = 0;
         uint32_t least_used_count = UINT32_MAX;
         time_t oldest_access = time(NULL);
@@ -67,225 +75,292 @@ MemoryRegion* get_or_create_page(vm_address_t address) {
                 (num_cached_regions - least_used_index - 1) * sizeof(MemoryRegion));
         num_cached_regions--;
     }
-    
-    // 映射新页面
-    void* mapped_memory = mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+    void *mapped_memory = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (mapped_memory == MAP_FAILED) {
         pthread_mutex_unlock(&regions_mutex);
-        return NULL;
+        return -1;
     }
-    
-    mach_vm_size_t bytes_read;
-    kern_return_t kr = vm_read_overwrite(target_task, page_address, PAGE_SIZE, (vm_address_t)mapped_memory, &bytes_read);
-    if (kr != KERN_SUCCESS || bytes_read != PAGE_SIZE) {
-        munmap(mapped_memory, PAGE_SIZE);
+
+    kr = vm_read_overwrite(target_task, region_start, size, (vm_address_t)mapped_memory, &bytes_read);
+    if (kr != KERN_SUCCESS || bytes_read != size) {
+        munmap(mapped_memory, size);
         pthread_mutex_unlock(&regions_mutex);
-        return NULL;
+        return -1;
     }
-    
-    cached_regions[num_cached_regions].base_address = page_address;
+
+    cached_regions[num_cached_regions].base_address = region_start;
     cached_regions[num_cached_regions].mapped_memory = mapped_memory;
-    cached_regions[num_cached_regions].mapped_size = PAGE_SIZE;
+    cached_regions[num_cached_regions].mapped_size = size;
     cached_regions[num_cached_regions].access_count = 1;
     cached_regions[num_cached_regions].last_access = time(NULL);
-    
     num_cached_regions++;
-    
+
     pthread_mutex_unlock(&regions_mutex);
-    return &cached_regions[num_cached_regions - 1];
-}
-
-void* 读任意地址(vm_address_t address, size_t size) {
-    MemoryRegion* region = get_or_create_page(address);
-    if (!region) {
-        return NULL;
-    }
-    
-    size_t offset = address - region->base_address;
-    void* buffer = malloc(size);  // 总是分配新的内存
-    if (!buffer) {
-        return NULL;
-    }
-    
-    if (offset + size > PAGE_SIZE) {
-        // 如果读取跨越了页面边界，我们需要分段读取
-        size_t first_part = PAGE_SIZE - offset;
-        memcpy(buffer, (char*)region->mapped_memory + offset, first_part);
-        
-        // 读取剩余部分
-        size_t remaining = size - first_part;
-        void* remaining_data = 读任意地址(address + first_part, remaining);
-        if (!remaining_data) {
-            free(buffer);
-            return NULL;
-        }
-        
-        memcpy((char*)buffer + first_part, remaining_data, remaining);
-        free(remaining_data);
-    } else {
-        // 如果读取没有跨越页面边界，直接复制数据
-        memcpy(buffer, (char*)region->mapped_memory + offset, size);
-    }
-    
-    return buffer;
-}
-
-int 写任意地址(vm_address_t address, const void* data, size_t size) {
-    MemoryRegion* region = get_or_create_page(address);
-    if (!region) {
-        return -1;
-    }
-    
-    size_t offset = address - region->base_address;
-    if (offset + size > PAGE_SIZE) {
-        // 如果写入跨越了页面边界，我们需要分段写入
-        size_t first_part = PAGE_SIZE - offset;
-        memcpy((char*)region->mapped_memory + offset, data, first_part);
-        
-        // 写入剩余部分
-        size_t remaining = size - first_part;
-        return 写任意地址(address + first_part, (char*)data + first_part, remaining);
-    } else {
-        // 如果写入没有跨越页面边界，直接写入映射内存
-        memcpy((char*)region->mapped_memory + offset, data, size);
-        return 0;
-    }
-}
-
-int32_t 读内存i32(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(int32_t));
-    if (!data) {
-        return 0;
-    }
-    int32_t result = *(int32_t*)data;
-    free(data);
-    return result;
-}
-
-int64_t 读内存i64(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(int64_t));
-    if (!data) {
-        return 0;
-    }
-    int64_t result = *(int64_t*)data;
-    free(data);
-    return result;
-}
-
-float 读内存f32(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(float));
-    if (!data) {
-        return 0.0f;
-    }
-    float result = *(float*)data;
-    free(data);
-    return result;
-}
-
-double 读内存f64(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(double));
-    if (!data) {
-        return 0.0;
-    }
-    double result = *(double*)data;
-    free(data);
-    return result;
-}
-
-int 写内存i32(vm_address_t address, int32_t value) {
-    return 写任意地址(address, &value, sizeof(int32_t));
-}
-
-int 写内存i64(vm_address_t address, int64_t value) {
-    return 写任意地址(address, &value, sizeof(int64_t));
-}
-
-int 写内存f32(vm_address_t address, float value) {
-    return 写任意地址(address, &value, sizeof(float));
-}
-
-int 写内存f64(vm_address_t address, double value) {
-    return 写任意地址(address, &value, sizeof(double));
-}
-
-void* 处理内存请求(void* arg) {
-    while (1) {
-        pthread_mutex_lock(&requests_mutex);
-        while (num_pending_requests == 0 && !stop_threads) {
-            pthread_cond_wait(&request_cond, &requests_mutex);
-        }
-        
-        if (stop_threads && num_pending_requests == 0) {
-            pthread_mutex_unlock(&requests_mutex);
-            break;
-        }
-
-        MemoryRequest request;
-        if (num_pending_requests > 0) {
-            request = pending_requests[0];
-            memmove(&pending_requests[0], &pending_requests[1], (num_pending_requests - 1) * sizeof(MemoryRequest));
-            num_pending_requests--;
-        }
-        pthread_mutex_unlock(&requests_mutex);
-
-        if (request.operation == 1) { // 写操作
-            int result = 写任意地址(request.address, request.buffer, request.size);
-            *(int*)request.result = result;
-        } else { // 读操作
-            void* result = 读任意地址(request.address, request.size);
-            if (result) {
-                memcpy(request.result, result, request.size);
-                if (result != (void*)((char*)get_or_create_page(request.address)->mapped_memory + (request.address & (PAGE_SIZE - 1)))) {
-                    free(result);
-                }
-            } else {
-                memset(request.result, 0, request.size);
-            }
-        }
-    }
-    
-    return NULL;
-}
-
-static void* mapper_thread_func(void* arg) {
-    return 处理内存请求(arg);
-}
-
-int 初始化内存模块(pid_t pid) {
-    target_pid = pid;
-    kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &target_task);
-    if (kr != KERN_SUCCESS) {
-        return -1;
-    }
-    
-    cached_regions = malloc(max_cached_regions * sizeof(MemoryRegion));
-    if (!cached_regions) {
-        return -1;
-    }
-    
-    for (int i = 0; i < NUM_THREADS; i++) {
-        thread_pool[i].id = i;
-        pthread_create(&thread_pool[i].thread, NULL, mapper_thread_func, &thread_pool[i]);
-    }
-    
     return 0;
 }
 
-void 关闭内存模块() {
-    stop_threads = 1;
-    pthread_cond_broadcast(&request_cond);
-    
-    for (int i = 0; i < NUM_THREADS; i++) {
-        pthread_join(thread_pool[i].thread, NULL);
+static void* read_memory(vm_address_t address, size_t size) {
+    MemoryRegion* region = find_cached_region(address);
+    if (region == NULL) {
+        int result = map_new_region(address);
+        if (result != 0) {
+            fprintf(stderr, "无法映射内存区域，错误代码：%d\n", result);
+            return NULL;
+        }
+        region = find_cached_region(address);
     }
-    
+
+    if (address < region->base_address || address >= region->base_address + region->mapped_size - size) {
+        fprintf(stderr, "错误：地址 0x%llx 超出映射范围 (0x%llx - 0x%llx)\n", 
+                (unsigned long long)address, 
+                (unsigned long long)region->base_address, 
+                (unsigned long long)(region->base_address + region->mapped_size));
+        return NULL;
+    }
+
+    vm_address_t offset = address - region->base_address;
+    return (void *)((char *)region->mapped_memory + offset);
+}
+
+int32_t 读内存i32(vm_address_t address) {
+    void* ptr = read_memory(address, sizeof(int32_t));
+    return ptr ? *(int32_t*)ptr : 0;
+}
+
+int64_t 读内存i64(vm_address_t address) {
+    void* ptr = read_memory(address, sizeof(int64_t));
+    return ptr ? *(int64_t*)ptr : 0;
+}
+
+float 读内存float(vm_address_t address) {
+    void* ptr = read_memory(address, sizeof(float));
+    return ptr ? *(float*)ptr : 0.0f;
+}
+
+double 读内存double(vm_address_t address) {
+    void* ptr = read_memory(address, sizeof(double));
+    return ptr ? *(double*)ptr : 0.0;
+}
+
+static void* async_read_memory(vm_address_t address, size_t size) {
+    static char buffer[sizeof(double)];  // 足够大的缓冲区来存储任何类型
+    memset(buffer, 0, sizeof(buffer));
+
+    pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    int completed = 0;
+
+    pthread_mutex_lock(&requests_mutex);
+    if (num_pending_requests >= MAX_PENDING_REQUESTS) {
+        pthread_mutex_unlock(&requests_mutex);
+        fprintf(stderr, "等待请求队列已满\n");
+        return NULL;
+    }
+
+    pending_requests[num_pending_requests].address = address;
+    pending_requests[num_pending_requests].result = buffer;
+    pending_requests[num_pending_requests].cond = &cond;
+    pending_requests[num_pending_requests].mutex = &mutex;
+    pending_requests[num_pending_requests].completed = &completed;
+    pending_requests[num_pending_requests].is_write = 0;
+    num_pending_requests++;
+
+    pthread_cond_signal(&request_cond);
+    pthread_mutex_unlock(&requests_mutex);
+
+    pthread_mutex_lock(&mutex);
+    while (!completed) {
+        pthread_cond_wait(&cond, &mutex);
+    }
+    pthread_mutex_unlock(&mutex);
+
+    return buffer;
+}
+
+int32_t 异步读内存i32(vm_address_t address) {
+    void* ptr = async_read_memory(address, sizeof(int32_t));
+    return ptr ? *(int32_t*)ptr : 0;
+}
+
+int64_t 异步读内存i64(vm_address_t address) {
+    void* ptr = async_read_memory(address, sizeof(int64_t));
+    return ptr ? *(int64_t*)ptr : 0;
+}
+
+float 异步读内存float(vm_address_t address) {
+    void* ptr = async_read_memory(address, sizeof(float));
+    return ptr ? *(float*)ptr : 0.0f;
+}
+
+double 异步读内存double(vm_address_t address) {
+    void* ptr = async_read_memory(address, sizeof(double));
+    return ptr ? *(double*)ptr : 0.0;
+}
+
+static int write_memory(vm_address_t address, const void* value, size_t size) {
+    MemoryRegion* region = find_cached_region(address);
+    if (region == NULL) {
+        int result = map_new_region(address);
+        if (result != 0) {
+            fprintf(stderr, "无法映射内存区域，错误代码：%d\n", result);
+            return -1;
+        }
+        region = find_cached_region(address);
+    }
+
+    if (address < region->base_address || address >= region->base_address + region->mapped_size - size) {
+        fprintf(stderr, "错误：地址 0x%llx 超出映射范围 (0x%llx - 0x%llx)\n", 
+                (unsigned long long)address, 
+                (unsigned long long)region->base_address, 
+                (unsigned long long)(region->base_address + region->mapped_size));
+        return -1;
+    }
+
+    vm_address_t offset = address - region->base_address;
+    memcpy((char *)region->mapped_memory + offset, value, size);
+
+    kern_return_t kr = vm_write(target_task, address, (vm_offset_t)value, size);
+    if (kr != KERN_SUCCESS) {
+        fprintf(stderr, "vm_write 失败: %s\n", mach_error_string(kr));
+        return -1;
+    }
+
+    return 0;
+}
+
+int 写内存i32(vm_address_t address, int32_t value) {
+    return write_memory(address, &value, sizeof(int32_t));
+}
+
+int 写内存i64(vm_address_t address, int64_t value) {
+    return write_memory(address, &value, sizeof(int64_t));
+}
+
+int 写内存float(vm_address_t address, float value) {
+    return write_memory(address, &value, sizeof(float));
+}
+
+int 写内存double(vm_address_t address, double value) {
+    return write_memory(address, &value, sizeof(double));
+}
+
+static int async_write_memory(vm_address_t address, const void* value, size_t size) {
+    int result = -1;
+    pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    int completed = 0;
+
+    pthread_mutex_lock(&requests_mutex);
+    if (num_pending_requests >= MAX_PENDING_REQUESTS) {
+        pthread_mutex_unlock(&requests_mutex);
+        fprintf(stderr, "等待请求队列已满\n");
+        return -1;
+    }
+
+    pending_requests[num_pending_requests].address = address;
+    pending_requests[num_pending_requests].result = &result;
+    pending_requests[num_pending_requests].cond = &cond;
+    pending_requests[num_pending_requests].mutex = &mutex;
+    pending_requests[num_pending_requests].completed = &completed;
+    pending_requests[num_pending_requests].is_write = 1;
+    memcpy(&pending_requests[num_pending_requests].write_value, value, size);
+    num_pending_requests++;
+
+    pthread_cond_signal(&request_cond);
+    pthread_mutex_unlock(&requests_mutex);
+
+    pthread_mutex_lock(&mutex);
+    while (!completed) {
+        pthread_cond_wait(&cond, &mutex);
+    }
+    pthread_mutex_unlock(&mutex);
+
+    return result;
+}
+
+int 异步写内存i32(vm_address_t address, int32_t value) {
+    return async_write_memory(address, &value, sizeof(int32_t));
+}
+
+int 异步写内存i64(vm_address_t address, int64_t value) {
+    return async_write_memory(address, &value, sizeof(int64_t));
+}
+
+int 异步写内存float(vm_address_t address, float value) {
+    return async_write_memory(address, &value, sizeof(float));
+}
+
+int 异步写内存double(vm_address_t address, double value) {
+    return async_write_memory(address, &value, sizeof(double));
+}
+
+static void* mapper_thread_func(void* arg) {
+    while (1) {
+        pthread_mutex_lock(&requests_mutex);
+        while (num_pending_requests == 0) {
+            pthread_cond_wait(&request_cond, &requests_mutex);
+        }
+
+        MemoryRequest request = pending_requests[0];
+        memmove(&pending_requests[0], &pending_requests[1], (num_pending_requests - 1) * sizeof(MemoryRequest));
+        num_pending_requests--;
+        pthread_mutex_unlock(&requests_mutex);
+
+        if (request.is_write) {
+            int result = write_memory(request.address, request.write_value, sizeof(request.write_value));
+            *(int*)request.result = result;
+        } else {
+            void* result = read_memory(request.address, sizeof(double));
+            if (result) {
+                memcpy(request.result, result, sizeof(double));
+            } else {
+                memset(request.result, 0, sizeof(double));
+            }
+        }
+
+        pthread_mutex_lock(request.mutex);
+        *request.completed = 1;
+        pthread_cond_signal(request.cond);
+        pthread_mutex_unlock(request.mutex);
+    }
+    return NULL;
+}
+
+int initialize_memory_module(pid_t pid) {
+    kern_return_t kr;
+    target_pid = pid;
+
+    kr = task_for_pid(mach_task_self(), target_pid, &target_task);
+    if (kr != KERN_SUCCESS) {
+        fprintf(stderr, "task_for_pid 失败: %s\n", mach_error_string(kr));
+        return -1;
+    }
+
+    cached_regions = malloc(max_cached_regions * sizeof(MemoryRegion));
+    if (cached_regions == NULL) {
+        fprintf(stderr, "内存分配失败\n");
+        return -1;
+    }
+
+    int result = pthread_create(&mapper_thread, NULL, mapper_thread_func, NULL);
+    if (result != 0) {
+        fprintf(stderr, "创建映射线程失败: %s\n", strerror(result));
+        free(cached_regions);
+        return -1;
+    }
+
+    return 0;
+}
+
+void cleanup_memory_module(void) {
+    pthread_cancel(mapper_thread);
+    pthread_join(mapper_thread, NULL);
+
     for (int i = 0; i < num_cached_regions; i++) {
         munmap(cached_regions[i].mapped_memory, cached_regions[i].mapped_size);
     }
-    
     free(cached_regions);
-    cached_regions = NULL;
-    num_cached_regions = 0;
-    
+
     mach_port_deallocate(mach_task_self(), target_task);
 }
