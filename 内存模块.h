@@ -57,6 +57,5 @@ int 写内存f64(vm_address_t address, double value);
 
 int 初始化内存模块(pid_t pid);
 void 关闭内存模块();
-mach_vm_address_t 获取模块基地址(const char* module_name);
 
 #endif // MEMORY_MODULE_H
