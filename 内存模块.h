@@ -37,10 +37,10 @@ typedef struct {
     int from_pool;
 } MemoryReadResult;
 
-void 初始化内存池(MemoryPool* pool);
-void* 内存池分配(MemoryPool* pool, size_t size);
-void 内存池释放(MemoryPool* pool, void* ptr);
-void 销毁内存池(MemoryPool* pool);
+void    初始化内存池(MemoryPool* pool);
+void*   内存池分配(MemoryPool* pool, size_t size);
+void    内存池释放(MemoryPool* pool, void* ptr);
+void    销毁内存池(MemoryPool* pool);
 
 MemoryReadResult 读任意地址(vm_address_t address, size_t size);
 int 写任意地址(vm_address_t address, const void* data, size_t size);
@@ -57,10 +57,5 @@ int 写内存f64(vm_address_t address, double value);
 
 int 初始化内存模块(pid_t pid);
 void 关闭内存模块();
-
-
-
-vm_address_t 获取模块基址(const char* module_name);
-vm_address_t 读模块多级指针(const char* module_name, vm_address_t offset, int* offsets, int level);
 
 #endif // MEMORY_MODULE_H
