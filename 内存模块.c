@@ -508,7 +508,7 @@ void 关闭内存模块() {
         mach_port_deallocate(mach_task_self(), target_task);
         target_task = MACH_PORT_NULL;
     }
-    内存池销毁(&memory_pool);
+    销毁内存池(&memory_pool);
 }
 
 
@@ -518,6 +518,6 @@ int 初始化内存模块(pid_t pid) {
         return 0;
     }
     
-    内存池初始化(&memory_pool);
+    初始化内存池(&memory_pool);
     return 1;
 }
