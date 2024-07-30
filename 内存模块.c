@@ -5,6 +5,10 @@
 #include <sys/mman.h>
 #include <time.h>
 #include <pthread.h>
+#include <mach/mach.h>
+
+#define NUM_THREADS 4
+#define INITIAL_CACHED_REGIONS 100
 
 #define ALIGN4(size) (((size) + 3) & ~3)
 #define PAGE_SIZE 4096
@@ -142,12 +146,25 @@ int 写任意地址(vm_address_t address, const void* data, size_t size) {
         size_t first_part = PAGE_SIZE - offset;
         memcpy((char*)region->mapped_memory + offset, data, first_part);
         
+        // 写入第一部分到目标进程
+        kern_return_t kr = vm_write(target_task, address, (vm_offset_t)data, first_part);
+        if (kr != KERN_SUCCESS) {
+            return -1;
+        }
+        
         // 写入剩余部分
         size_t remaining = size - first_part;
         return 写任意地址(address + first_part, (char*)data + first_part, remaining);
     } else {
-        // 如果写入没有跨越页面边界，直接写入映射内存
+        // 如果写入没有跨越页面边界，直接写入映射内存和目标进程
         memcpy((char*)region->mapped_memory + offset, data, size);
+        
+        // 写入到目标进程
+        kern_return_t kr = vm_write(target_task, address, (vm_offset_t)data, size);
+        if (kr != KERN_SUCCESS) {
+            return -1;
+        }
+        
         return 0;
     }
 }
@@ -255,19 +272,52 @@ int 初始化内存模块(pid_t pid) {
     target_pid = pid;
     kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &target_task);
     if (kr != KERN_SUCCESS) {
+        printf("Failed to get task for pid %d: %s\n", pid, mach_error_string(kr));
         return -1;
     }
     
     cached_regions = malloc(max_cached_regions * sizeof(MemoryRegion));
     if (!cached_regions) {
+        printf("Failed to allocate memory for cached regions\n");
         return -1;
     }
     
     for (int i = 0; i < NUM_THREADS; i++) {
         thread_pool[i].id = i;
-        pthread_create(&thread_pool[i].thread, NULL, mapper_thread_func, &thread_pool[i]);
+        if (pthread_create(&thread_pool[i].thread, NULL, mapper_thread_func, &thread_pool[i]) != 0) {
+            printf("Failed to create thread %d\n", i);
+            return -1;
+        }
     }
     
+    // 初始化互斥锁和条件变量
+    if (pthread_mutex_init(&regions_mutex, NULL) != 0 ||
+        pthread_mutex_init(&requests_mutex, NULL) != 0 ||
+        pthread_cond_init(&request_cond, NULL) != 0) {
+        printf("Failed to initialize mutex or condition variable\n");
+        return -1;
+    }
+    
+    // 设置目标进程的内存区域为可读写
+    vm_address_t address = 0;
+    vm_size_t size = 0;
+    natural_t depth = 0;
+    while (1) {
+        mach_vm_region_recurse_info_data_t info;
+        mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_COUNT_64;
+        kr = mach_vm_region_recurse(target_task, &address, &size, &depth, (vm_region_recurse_info_t)&info, &count);
+        if (kr != KERN_SUCCESS) break;
+
+        // 修改内存区域为可读写
+        kr = vm_protect(target_task, address, size, FALSE, VM_PROT_READ | VM_PROT_WRITE);
+        if (kr != KERN_SUCCESS) {
+            printf("Warning: Failed to set memory protection for region at %llx: %s\n", address, mach_error_string(kr));
+        }
+
+        address += size;
+    }
+
+    printf("Memory module initialized successfully for pid %d\n", pid);
     return 0;
 }
 
