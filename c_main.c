@@ -7,6 +7,35 @@
 #include <string.h>
 
 #define TARGET_PROCESS_NAME "pvz"
+#define START_ADDRESS 0x00000000000
+#define END_ADDRESS   0x20000000000
+
+int 是否有效地址(vm_address_t address) {
+    void* data = 读任意地址(address, sizeof(int32_t));
+    if (data) {
+        内存池释放(data);
+        return 1;
+    }
+    return 0;
+}
+
+void 扫描内存范围() {
+    printf("开始扫描内存范围 0x%llx 到 0x%llx\n", START_ADDRESS, END_ADDRESS);
+
+    for (vm_address_t address = START_ADDRESS; address < END_ADDRESS; address += sizeof(int32_t)) {
+        if (是否有效地址(address)) {
+            int32_t value = 读内存i32(address);
+            printf("地址: 0x%llx, 值: %d\n", (unsigned long long)address, value);
+        }
+        
+        // 每扫描 100MB 输出一次进度
+        if (address % (100 * 1024 * 1024) == 0) {
+            printf("当前进度: 0x%llx (%.2f%%)\n", (unsigned long long)address, (float)address / END_ADDRESS * 100);
+        }
+    }
+
+    printf("内存扫描完成\n");
+}
 
 int c_main() {
     pid_t target_pid = get_pid_by_name(TARGET_PROCESS_NAME);
@@ -58,6 +87,14 @@ int c_main() {
         }
     } else {
         printf("任意大小写入失败\n");
+    }
+
+    // 添加新的内存扫描功能
+    printf("是否要执行内存扫描? (y/n): ");
+    char response;
+    scanf(" %c", &response);
+    if (response == 'y' || response == 'Y') {
+        扫描内存范围();
     }
 
     关闭内存模块();
