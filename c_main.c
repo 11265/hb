@@ -31,52 +31,33 @@ int c_main() {
     int32_t write_value_i32 = 42;
     if (写内存i32(test_address, write_value_i32) == 0) {
         int32_t read_value_i32 = 读内存i32(test_address);
-        printf("写入 int32: %d, 读取 int32: %d\n", write_value_i32, read_value_i32);
+        printf("int32 测试: 写入 %d, 读取 %d\n", write_value_i32, read_value_i32);
     } else {
-        printf("写入 int32 失败\n");
-    }
-
-    // 测试 int64
-    int64_t write_value_i64 = 1234567890123LL;
-    if (写内存i64(test_address, write_value_i64) == 0) {
-        int64_t read_value_i64 = 读内存i64(test_address);
-        printf("写入 int64: %lld, 读取 int64: %lld\n", write_value_i64, read_value_i64);
-    } else {
-        printf("写入 int64 失败\n");
+        printf("int32 写入失败\n");
     }
 
     // 测试 float
-    float write_value_f32 = 3.14159f;
+    float write_value_f32 = 3.14f;
     if (写内存f32(test_address, write_value_f32) == 0) {
         float read_value_f32 = 读内存f32(test_address);
-        printf("写入 float: %f, 读取 float: %f\n", write_value_f32, read_value_f32);
+        printf("float 测试: 写入 %f, 读取 %f\n", write_value_f32, read_value_f32);
     } else {
-        printf("写入 float 失败\n");
+        printf("float 写入失败\n");
     }
 
-    // 测试 double
-    double write_value_f64 = 2.71828182845904523536;
-    if (写内存f64(test_address, write_value_f64) == 0) {
-        double read_value_f64 = 读内存f64(test_address);
-        printf("写入 double: %lf, 读取 double: %lf\n", write_value_f64, read_value_f64);
-    } else {
-        printf("写入 double 失败\n");
-    }
-
-    // 测试读写任意地址
-    const char* test_string = "Hello, World!";
-    size_t test_string_length = strlen(test_string) + 1; // 包括空字符
-
-    if (写任意地址(0x200000000, test_string, test_string_length) == 0) {
-        char* read_string = (char*)读任意地址(0x200000000, test_string_length);
-        if (read_string) {
-            printf("写入字符串: %s\n读取字符串: %s\n", test_string, read_string);
-            free(read_string);  // 释放读取的字符串内存
+    // 测试任意大小的内存读写
+    char write_buffer[] = "Hello, World!";
+    size_t buffer_size = sizeof(write_buffer);
+    if (写任意地址(test_address, write_buffer, buffer_size) == 0) {
+        char* read_buffer = (char*)读任意地址(test_address, buffer_size);
+        if (read_buffer) {
+            printf("任意大小测试: 写入 '%s', 读取 '%s'\n", write_buffer, read_buffer);
+            内存池释放(read_buffer);
         } else {
-            printf("读取字符串失败\n");
+            printf("任意大小读取失败\n");
         }
     } else {
-        printf("写入字符串失败\n");
+        printf("任意大小写入失败\n");
     }
 
     关闭内存模块();
