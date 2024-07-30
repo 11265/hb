@@ -37,10 +37,15 @@ typedef struct {
     MemoryChunk* free_list;
 } MemoryPool;
 
+typedef struct {
+    void* data;
+    int from_pool;
+} MemoryReadResult;
+
 int  初始化内存模块(pid_t pid);
 void 关闭内存模块();
 
-void* 读任意地址(vm_address_t address, size_t size);
+MemoryReadResult 读任意地址(vm_address_t address, size_t size);
 int   写任意地址(vm_address_t address, const void* data, size_t size);
 
 int32_t 读内存i32(vm_address_t address);
