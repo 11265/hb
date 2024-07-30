@@ -36,7 +36,7 @@ jobs:
 
     - name: Link object files
       run: |
-        xcrun -sdk iphoneos clang main.o c_main.o 内存模块.o 查找进程.o -o main -arch arm64 -mios-version-min=14.0 -framework Foundation -framework CoreFoundation -framework IOKit -lSystem
+        xcrun -sdk iphoneos clang main.o c_main.o 内存模块.o 查找进程.o -o main -arch arm64 -mios-version-min=14.0 -framework Foundation -framework CoreFoundation
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
