@@ -71,7 +71,7 @@ int c_main() {
         char* read_string = (char*)读任意地址(0x200000000, test_string_length);
         if (read_string) {
             printf("写入字符串: %s\n读取字符串: %s\n", test_string, read_string);
-            free(read_string);  // 释放读取的字符串内存
+            内存释放(read_string);  // 使用内存池的释放函数
         } else {
             printf("读取字符串失败\n");
         }
