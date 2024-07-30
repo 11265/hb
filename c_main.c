@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-int _c_main() {
+int c_main(void) {
     pid_t target_pid = get_pid_by_name("pvz");
     if (target_pid == -1) {
         printf("未找到目标进程\n");
