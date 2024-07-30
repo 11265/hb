@@ -158,7 +158,8 @@ void* 读任意地址(vm_address_t address, size_t size) {
     
     size_t offset = address - region->base_address;
     void* buffer;
-    if (size <= SMALL_ALLOCATION_THRESHOLD) {
+    int use_memory_pool = (size <= SMALL_ALLOCATION_THRESHOLD);
+    if (use_memory_pool) {
         buffer = 内存池分配(&memory_pool, size);
     } else {
         buffer = malloc(size);
@@ -175,7 +176,7 @@ void* 读任意地址(vm_address_t address, size_t size) {
         size_t remaining = size - first_part;
         void* remaining_data = 读任意地址(address + first_part, remaining);
         if (!remaining_data) {
-            if (size <= SMALL_ALLOCATION_THRESHOLD) {
+            if (use_memory_pool) {
                 内存池释放(&memory_pool, buffer);
             } else {
                 free(buffer);
@@ -184,11 +185,7 @@ void* 读任意地址(vm_address_t address, size_t size) {
         }
         
         memcpy((char*)buffer + first_part, remaining_data, remaining);
-        if (remaining > SMALL_ALLOCATION_THRESHOLD) {
-            free(remaining_data);
-        } else {
-            内存池释放(&memory_pool, remaining_data);
-        }
+        // 这里不需要释放 remaining_data，因为它是由递归调用的 读任意地址 分配的
     } else {
         memcpy(buffer, (char*)region->mapped_memory + offset, size);
     }
