@@ -1,5 +1,4 @@
 // 内存模块.c
-
 #include "内存模块.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,6 +15,7 @@
 #define INITIAL_CACHED_REGIONS 100
 #define SMALL_ALLOCATION_THRESHOLD 256
 
+mach_port_t target_task;
 extern task_t target_task;
 static MemoryRegion *cached_regions = NULL;
 static int num_cached_regions = 0;
@@ -501,4 +501,23 @@ char* 读字符串(vm_address_t address) {
 
 int 写字符串(vm_address_t address, const char* string) {
     return 写任意地址(address, string, strlen(string) + 1);
+}
+
+void 关闭内存模块() {
+    if (target_task != MACH_PORT_NULL) {
+        mach_port_deallocate(mach_task_self(), target_task);
+        target_task = MACH_PORT_NULL;
+    }
+    内存池销毁(&memory_pool);
+}
+
+
+int 初始化内存模块(pid_t pid) {
+    kern_return_t kr = task_for_pid(mach_task_self(), pid, &target_task);
+    if (kr != KERN_SUCCESS) {
+        return 0;
+    }
+    
+    内存池初始化(&memory_pool);
+    return 1;
 }
