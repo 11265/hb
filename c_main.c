@@ -15,17 +15,26 @@
 #define END_ADDRESS   0x200000000ULL  // 到 8GB 结束
 #define THREAD_COUNT  4
 #define BATCH_SIZE    (1024 * 1024)   // 1MB 批量读取
+#define MAX_RESULTS   1000            // 最大结果数
 
 volatile sig_atomic_t keep_running = 1;
 
-void intHandler(int dummy) {
-    keep_running = 0;
-}
+typedef struct {
+    vm_address_t address;
+    int32_t value;
+} ScanResult;
 
 typedef struct {
     vm_address_t start;
     vm_address_t end;
+    ScanResult* results;
+    int result_count;
+    pthread_mutex_t* mutex;
 } ScanRange;
+
+void intHandler(int dummy) {
+    keep_running = 0;
+}
 
 void* scan_thread(void* arg) {
     ScanRange* range = (ScanRange*)arg;
@@ -38,7 +47,13 @@ void* scan_thread(void* arg) {
         if (读任意地址(current, buffer, batch_size) == 0) {
             for (size_t i = 0; i < batch_size / sizeof(int32_t); i++) {
                 if (buffer[i] > 1000000) {
-                    printf("地址: 0x%llx, 值: %d\n", (unsigned long long)(current + i * sizeof(int32_t)), buffer[i]);
+                    pthread_mutex_lock(range->mutex);
+                    if (range->result_count < MAX_RESULTS) {
+                        range->results[range->result_count].address = current + i * sizeof(int32_t);
+                        range->results[range->result_count].value = buffer[i];
+                        range->result_count++;
+                    }
+                    pthread_mutex_unlock(range->mutex);
                 }
             }
         }
@@ -66,10 +81,16 @@ void 扫描内存范围() {
     pthread_t threads[THREAD_COUNT];
     ScanRange ranges[THREAD_COUNT];
     vm_address_t range_size = (END_ADDRESS - START_ADDRESS) / THREAD_COUNT;
+    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+    ScanResult* all_results = malloc(MAX_RESULTS * sizeof(ScanResult) * THREAD_COUNT);
 
     for (int i = 0; i < THREAD_COUNT; i++) {
         ranges[i].start = START_ADDRESS + i * range_size;
         ranges[i].end = (i == THREAD_COUNT - 1) ? END_ADDRESS : ranges[i].start + range_size;
+        ranges[i].results = &all_results[i * MAX_RESULTS];
+        ranges[i].result_count = 0;
+        ranges[i].mutex = &mutex;
         pthread_create(&threads[i], NULL, scan_thread, &ranges[i]);
     }
 
@@ -82,6 +103,21 @@ void 扫描内存范围() {
     } else {
         printf("内存扫描完成\n");
     }
+
+    // 打印结果
+    printf("\n扫描结果：\n");
+    int total_results = 0;
+    for (int i = 0; i < THREAD_COUNT; i++) {
+        for (int j = 0; j < ranges[i].result_count; j++) {
+            printf("地址: 0x%llx, 值: %d\n", 
+                   (unsigned long long)ranges[i].results[j].address, 
+                   ranges[i].results[j].value);
+            total_results++;
+        }
+    }
+    printf("共找到 %d 个结果\n", total_results);
+
+    free(all_results);
 }
 
 int c_main() {
