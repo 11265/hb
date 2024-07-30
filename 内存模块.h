@@ -10,7 +10,6 @@
 #define MAX_PENDING_REQUESTS 1000
 #define MEMORY_POOL_SIZE 1024 * 1024  // 1MB 内存池
 #define SMALL_ALLOCATION_THRESHOLD 256  // 小于此值的分配使用内存池
-extern MemoryPool memory_pool;
 
 typedef struct {
     vm_address_t base_address;
