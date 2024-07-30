@@ -36,41 +36,6 @@ int c_main(void) {
     // double
     printf("读取 double: %.14f\n", 读内存f64(test_address));
 
-    // 读取其他类型（使用读任意地址）
-    // int8_t
-    MemoryReadResult result_i8 = 读任意地址(test_address, sizeof(int8_t));
-    if (result_i8.data) {
-        printf("读取 int8: %d\n", *(int8_t*)result_i8.data);
-        if (result_i8.from_pool) {
-            内存池释放(&memory_pool, result_i8.data);
-        } else {
-            free(result_i8.data);
-        }
-    }
-
-    // uint32_t
-    MemoryReadResult result_u32 = 读任意地址(test_address, sizeof(uint32_t));
-    if (result_u32.data) {
-        printf("读取 uint32: %u\n", *(uint32_t*)result_u32.data);
-        if (result_u32.from_pool) {
-            内存池释放(&memory_pool, result_u32.data);
-        } else {
-            free(result_u32.data);
-        }
-    }
-
-    // 读取字符串
-    size_t string_length = 20; // 假设字符串最大长度为20，根据实际情况调整
-    MemoryReadResult result_str = 读任意地址(test_address, string_length);
-    if (result_str.data) {
-        printf("读取字符串: %s\n", (char*)result_str.data);
-        if (result_str.from_pool) {
-            内存池释放(&memory_pool, result_str.data);
-        } else {
-            free(result_str.data);
-        }
-    }
-
     关闭内存模块();
     return 0;
 }
