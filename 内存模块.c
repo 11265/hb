@@ -510,15 +510,3 @@ void 关闭内存模块() {
     }
     销毁内存池(&memory_pool);
 }
-
-/*
-int 初始化内存模块(pid_t pid) {
-    kern_return_t kr = task_for_pid(mach_task_self(), pid, &target_task);
-    if (kr != KERN_SUCCESS) {
-        return 0;
-    }
-    
-    初始化内存池(&memory_pool);
-    return 1;
-}
-*/
