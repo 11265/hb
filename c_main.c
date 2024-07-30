@@ -27,6 +27,17 @@ int c_main() {
     // 测试读写不同类型的内存
     vm_address_t test_address = 0x1060E1388; // 假设这是一个有效的内存地址
 
+    // 读取其他数据类型
+    printf("读取 int32: %d\n", 读内存i32(test_address));
+
+    // 测试写入和读取 int32_t
+    int32_t test_i32 = 12345;
+    if (写内存i32(test_address, test_i32) == 0) {
+        printf("写入 int32 成功: %d\n", test_i32);
+        printf("读取 int32: %d\n", 读内存i32(test_address));
+    } else {
+        printf("写入 int32 失败\n");
+    }
 
 
     关闭内存模块();
