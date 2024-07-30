@@ -7,7 +7,7 @@
 #include <string.h>
 #include <stdint.h>
 
-#define TARGET_PROCESS_NAME "GoBa Pro"
+#define TARGET_PROCESS_NAME "pvz"
 
 int c_main(void) {
     pid_t target_pid = get_pid_by_name(TARGET_PROCESS_NAME);
@@ -16,7 +16,7 @@ int c_main(void) {
         return -1;
     }
     
-    printf("找到目标进程 GoBa Pro, PID: %d\n", target_pid);
+    printf("找到目标进程 pvz, PID: %d\n", target_pid);
 
     if (初始化内存模块(target_pid) != 0) {
         printf("内存模块初始化失败\n");
@@ -24,16 +24,16 @@ int c_main(void) {
     }
     printf("内存模块初始化成功\n");
 
-    // 获取 "GoBa Pro" 模块的基地址
-    mach_vm_address_t base_address = 获取模块基地址("GoBa Pro");
+    // 获取 "pvz" 模块的基地址
+    mach_vm_address_t base_address = 获取模块基地址("pvz");
     if (base_address) {
-        printf("模块 'GoBa Pro' 的基地址: 0x%llx\n", base_address);
+        printf("模块 'pvz' 的基地址: 0x%llx\n", base_address);
     } else {
-        printf("未找到模块 'GoBa Pro'\n");
+        printf("未找到模块 'pvz'\n");
         关闭内存模块();
         return 1;
     }
-
+/*
     // 使用基地址进行后续操作
     vm_address_t test_address = base_address +  0xD94B0 +    0x634; // 示例偏移，请根据实际情况修改
 
@@ -48,7 +48,7 @@ int c_main(void) {
     } else {
         printf("写入 int32 失败\n");
     }
-
+*/
     关闭内存模块();
     return 0;
 }
