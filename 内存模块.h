@@ -29,7 +29,10 @@ typedef struct {
 int  初始化内存模块(pid_t pid);
 void 关闭内存模块();
 
-void* 读任意地址(vm_address_t address, size_t size);
+void* 内存分配(size_t size);
+void  内存释放(void* ptr);
+
+void* 读任意地址(vm_address_t address, void* buffer, size_t size);
 int   写任意地址(vm_address_t address, const void* data, size_t size);
 
 int32_t 读内存i32(vm_address_t address);
@@ -42,8 +45,6 @@ int 写内存i64(vm_address_t address, int64_t value);
 int 写内存f32(vm_address_t address, float value);
 int 写内存f64(vm_address_t address, double value);
 
-// 新增函数声明
-void* 内存分配(size_t size);
-void  内存释放(void* ptr);
+
 
 #endif // MEMORY_MODULE_H
