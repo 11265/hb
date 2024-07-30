@@ -25,16 +25,16 @@ typedef struct {
     void* result;  // 用于存储操作结果
 } MemoryRequest;
 
-int 初始化内存模块(pid_t pid);
+int  初始化内存模块(pid_t pid);
 void 关闭内存模块();
 
 void* 读任意地址(vm_address_t address, size_t size);
-int 写任意地址(vm_address_t address, const void* data, size_t size);
+int   写任意地址(vm_address_t address, const void* data, size_t size);
 
 int32_t 读内存i32(vm_address_t address);
 int64_t 读内存i64(vm_address_t address);
-float 读内存f32(vm_address_t address);
-double 读内存f64(vm_address_t address);
+float   读内存f32(vm_address_t address);
+double  读内存f64(vm_address_t address);
 
 int 写内存i32(vm_address_t address, int32_t value);
 int 写内存i64(vm_address_t address, int64_t value);
