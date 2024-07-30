@@ -1,3 +1,5 @@
+// 内存模块.h
+
 #ifndef MEMORY_MODULE_H
 #define MEMORY_MODULE_H
 
@@ -7,8 +9,6 @@
 #include <pthread.h>
 
 #define INITIAL_CACHED_REGIONS 100
-#define NUM_THREADS 4
-#define MAX_PENDING_REQUESTS 1000
 #define MEMORY_POOL_SIZE (10 * 1024 * 1024)  // 10MB 内存池
 #define SMALL_ALLOCATION_THRESHOLD 256  // 小于此值的分配使用内存池
 
@@ -37,14 +37,6 @@ typedef struct {
     int from_pool;
 } MemoryReadResult;
 
-typedef struct {
-    vm_address_t address;
-    size_t size;
-    void* buffer;
-    int operation;
-    void* result;
-} MemoryRequest;
-
 void 初始化内存池(MemoryPool* pool);
 void* 内存池分配(MemoryPool* pool, size_t size);
 void 内存池释放(MemoryPool* pool, void* ptr);
@@ -65,13 +57,5 @@ int 写内存f64(vm_address_t address, double value);
 
 int 初始化内存模块(pid_t pid);
 void 关闭内存模块();
-
-MemoryReadResult 异步读任意地址(vm_address_t address, size_t size);
-int 异步写任意地址(vm_address_t address, const void* data, size_t size);
-
-int32_t 异步读内存i32(vm_address_t address);
-int64_t 异步读内存i64(vm_address_t address);
-float   异步读内存f32(vm_address_t address);
-double  异步读内存f64(vm_address_t address);
 
 #endif // MEMORY_MODULE_H
