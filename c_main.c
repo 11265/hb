@@ -1,5 +1,3 @@
-// c_main.c
-
 #include "内存模块.h"
 #include "查找进程.h"
 #include <stdio.h>
@@ -17,13 +15,20 @@ int c_main() {
 
     printf("找到目标进程 %s, PID: %d\n", TARGET_PROCESS_NAME, target_pid);
 
-    if (初始化内存模块(target_pid) != 0) {
+    // 创建并初始化内存模块配置
+    内存模块配置 配置 = {
+        .页面大小 = 4096,  // 假设页面大小为 4KB
+        .线程数量 = 4,     // 使用 4 个线程
+        .最大等待请求数 = 100,
+        .初始缓存区域数 = 10
+    };
+
+    if (初始化内存模块(target_pid, &配置) != 0) {
         printf("初始化内存模块失败\n");
         return 1;
     }
 
     printf("内存模块初始化成功\n");
-
     // 测试读写不同类型的内存
     vm_address_t test_address = 0x1060E1388; // 假设这是一个有效的内存地址
 
