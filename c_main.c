@@ -18,7 +18,7 @@ int c_main(void) {
     
     printf("找到进程 %s，PID: %d\n", TARGET_PROCESS_NAME, target_pid);
 
-    int result = initialize_memory_module(target_pid);
+    int result = 初始化内存模块(target_pid);
     if (result != 0) {
         fprintf(stderr, "无法初始化内存模块，错误代码：%d\n", result);
         return -1;
