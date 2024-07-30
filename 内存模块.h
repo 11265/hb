@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <mach/mach.h>
+#include <time.h>
+#include <pthread.h>
 
 #define NUM_THREADS 4
 #define MAX_PENDING_REQUESTS 100
