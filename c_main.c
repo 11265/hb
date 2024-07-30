@@ -7,13 +7,16 @@
 #include <string.h>
 #include <stdint.h>
 
+#define TARGET_PROCESS_NAME "GoBa Pro"
+
 int c_main(void) {
-    pid_t target_pid = get_pid_by_name("goba pro");
+    pid_t target_pid = get_pid_by_name(TARGET_PROCESS_NAME);
     if (target_pid == -1) {
-        printf("未找到目标进程\n");
-        return 1;
+        fprintf(stderr, "未找到进程：%s\n", TARGET_PROCESS_NAME);
+        return -1;
     }
-    printf("找到目标进程 goba pro, PID: %d\n", target_pid);
+    
+    printf("找到目标进程 GoBa Pro, PID: %d\n", target_pid);
 
     if (初始化内存模块(target_pid) != 0) {
         printf("内存模块初始化失败\n");
@@ -21,12 +24,12 @@ int c_main(void) {
     }
     printf("内存模块初始化成功\n");
 
-    // 获取 "goba pro" 模块的基地址
-    mach_vm_address_t base_address = 获取模块基地址("goba pro");
+    // 获取 "GoBa Pro" 模块的基地址
+    mach_vm_address_t base_address = 获取模块基地址("GoBa Pro");
     if (base_address) {
-        printf("模块 'goba pro' 的基地址: 0x%llx\n", base_address);
+        printf("模块 'GoBa Pro' 的基地址: 0x%llx\n", base_address);
     } else {
-        printf("未找到模块 'goba pro'\n");
+        printf("未找到模块 'GoBa Pro'\n");
         关闭内存模块();
         return 1;
     }
