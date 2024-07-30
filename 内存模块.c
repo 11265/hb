@@ -213,10 +213,23 @@ int 写任意地址(vm_address_t address, const void* data, size_t size) {
         size_t first_part = PAGE_SIZE - offset;
         memcpy((char*)region->mapped_memory + offset, data, first_part);
         
+        // 写入目标进程内存
+        kern_return_t kr = vm_write(target_task, address, (vm_offset_t)data, first_part);
+        if (kr != KERN_SUCCESS) {
+            return -1;
+        }
+        
         size_t remaining = size - first_part;
         return 写任意地址(address + first_part, (char*)data + first_part, remaining);
     } else {
         memcpy((char*)region->mapped_memory + offset, data, size);
+        
+        // 写入目标进程内存
+        kern_return_t kr = vm_write(target_task, address, (vm_offset_t)data, size);
+        if (kr != KERN_SUCCESS) {
+            return -1;
+        }
+        
         return 0;
     }
 }
@@ -307,6 +320,33 @@ int 初始化内存模块(pid_t pid) {
     
     初始化内存池(&memory_pool);
     
+    // 修改目标进程的内存保护
+    vm_address_t address = 0;
+    vm_size_t size = 0;
+    natural_t depth = 0;
+    while (1) {
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_COUNT_64;
+        kr = vm_region_recurse_64(target_task, &address, &size, &depth, (vm_region_info_64_t)&info, &count);
+        if (kr != KERN_SUCCESS) break;
+
+        if (!(info.protection & VM_PROT_WRITE)) {
+            vm_prot_t new_protection = info.protection | VM_PROT_WRITE;
+            kr = vm_protect(target_task, address, size, FALSE, new_protection);
+            if (kr != KERN_SUCCESS) {
+                // 处理错误
+                printf("Failed to modify memory protection at address 0x%llx, size: %llu, error: %d\n", 
+                       (unsigned long long)address, (unsigned long long)size, kr);
+                // 注意：这里我们继续执行，而不是立即返回，因为我们可能还能修改其他内存区域
+            } else {
+                printf("Successfully modified memory protection at address 0x%llx, size: %llu\n", 
+                       (unsigned long long)address, (unsigned long long)size);
+            }
+        }
+
+        address += size;
+    }
+
     return 0;
 }
 
