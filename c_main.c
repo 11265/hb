@@ -7,7 +7,7 @@
 #include <string.h>
 
 int c_main(void) {
-    pid_t target_pid = get_pid_by_name("pvz");
+    pid_t target_pid = 根据进程名获取PID("pvz");
     if (target_pid == -1) {
         printf("未找到目标进程\n");
         return 1;
