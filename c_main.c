@@ -24,7 +24,22 @@ int c_main(void) {
     }
     printf("内存模块初始化成功\n");
 
+    // 使用多级指针读取示例
+    const char* module_name = "pvz";
+    vm_address_t offset = 0x20A88C8;
+    int offsets[] = {0x5C8};
+    int level = 2;
 
+    vm_address_t final_address = 读模块多级指针(module_name, offset, offsets, level);
+    if (final_address == 0) {
+        printf("读取多级指针失败\n");
+    } else {
+        printf("最终地址: 0x%llx\n", (unsigned long long)final_address);
+
+        // 读取最终地址的值
+        int32_t value = 读内存i32(final_address);
+        printf("读取的值: %d\n", value);
+    }
 
     关闭内存模块();
     printf("关闭内存模块 'pvz'\n");
