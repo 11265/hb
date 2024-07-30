@@ -9,11 +9,15 @@
 #include <mach-o/loader.h>
 #include <mach/vm_map.h>
 #include <mach-o/dyld_images.h>
+#include <mach/mach_vm.h>
+
+
 
 #define ALIGN4(size) (((size) + 3) & ~3)
 #define PAGE_SIZE 4096
 #define PAGE_MASK (~(PAGE_SIZE - 1))
 
+extern task_t target_task;
 static MemoryRegion *cached_regions = NULL;
 static int num_cached_regions = 0;
 static int max_cached_regions = INITIAL_CACHED_REGIONS;
@@ -369,40 +373,53 @@ mach_vm_address_t 获取模块基地址(const char* module_name) {
         struct vm_region_submap_info_64 info;
         mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_COUNT_64;
         
-        kern_return_t kr = vm_region_recurse(target_task, (vm_address_t*)&address, (vm_size_t*)&size, &depth,
-                                    (vm_region_recurse_info_t)&info,
+        kern_return_t kr = vm_region_recurse_64(target_task, &address, &size, &depth,
+                                    (vm_region_info_64_t)&info,
                                     &count);
         
         if (kr != KERN_SUCCESS) break;
         
-        if (info.protection & VM_PROT_EXECUTE) {
-            char buffer[4096];
-            mach_vm_size_t bytes_read;
-            kr = vm_read_overwrite(target_task, address, 4096, (vm_address_t)buffer, (vm_size_t*)&bytes_read);
-            
-            if (kr == KERN_SUCCESS && bytes_read == 4096) {
-                if (*(uint32_t*)buffer == MH_MAGIC_64 || *(uint32_t*)buffer == MH_CIGAM_64) {
-                    struct mach_header_64* header = (struct mach_header_64*)buffer;
-                    char* string_table = buffer + sizeof(struct mach_header_64) + header->sizeofcmds;
-                    
-                    struct load_command* cmd = (struct load_command*)(buffer + sizeof(struct mach_header_64));
-                    for (uint32_t i = 0; i < header->ncmds; i++) {
-                        if (cmd->cmd == LC_SEGMENT_64) {
-                            struct segment_command_64* seg = (struct segment_command_64*)cmd;
-                            if (strcmp(seg->segname, "__TEXT") == 0) {
-                                char* module_path = string_table + seg->fileoff;
-                                if (strstr(module_path, module_name) != NULL) {
-                                    return address;
+        if (info.is_submap) {
+            depth++;
+        } else {
+            // 检查这个内存区域是否是可执行的
+            if (info.protection & VM_PROT_EXECUTE) {
+                // 读取这个区域的前4096字节（假设这足够包含Mach-O头部）
+                char buffer[4096];
+                mach_vm_size_t bytes_read;
+                kr = mach_vm_read_overwrite(target_task, address, 4096, (mach_vm_address_t)buffer, &bytes_read);
+                
+                if (kr == KERN_SUCCESS && bytes_read == 4096) {
+                    // 检查Mach-O魔数
+                    uint32_t magic = *(uint32_t*)buffer;
+                    if (magic == MH_MAGIC_64 || magic == MH_CIGAM_64) {
+                        struct mach_header_64* header = (struct mach_header_64*)buffer;
+                        char* string_table = buffer + sizeof(struct mach_header_64) + header->sizeofcmds;
+                        struct load_command* cmd = (struct load_command*)(buffer + sizeof(struct mach_header_64));
+                        
+                        for (uint32_t i = 0; i < header->ncmds; i++) {
+                            if (cmd->cmd == LC_SEGMENT_64) {
+                                struct segment_command_64* seg = (struct segment_command_64*)cmd;
+                                if (strcmp(seg->segname, "__TEXT") == 0) {
+                                    // 找到模块名称
+                                    char* name = strrchr(string_table, '/');
+                                    if (name) {
+                                        name++; // 跳过'/'
+                                        if (strcmp(name, module_name) == 0) {
+                                            return address;
+                                        }
+                                    }
+                                    break;
                                 }
                             }
+                            cmd = (struct load_command*)((char*)cmd + cmd->cmdsize);
                         }
-                        cmd = (struct load_command*)((char*)cmd + cmd->cmdsize);
                     }
                 }
             }
+            
+            address += size;
         }
-        
-        address += size;
     }
     
     return 0;
