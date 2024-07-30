@@ -1,47 +1,70 @@
-#ifndef MEMORY_MODULE_H
-#define MEMORY_MODULE_H
+#ifndef 内存模块_H
+#define 内存模块_H
 
-#include <mach/mach.h>
 #include <stdint.h>
-#include <unistd.h>
-
-#define INITIAL_CACHED_REGIONS 100
-#define NUM_THREADS 4
-#define MAX_PENDING_REQUESTS 1000
+#include <sys/types.h>
+#include <mach/mach.h>
 
 typedef struct {
-    vm_address_t base_address;
-    void* mapped_memory;
-    size_t mapped_size;
-    uint32_t access_count;
-    time_t last_access;
-} MemoryRegion;
+    vm_address_t 基地址;
+    void* 映射内存;
+    size_t 映射大小;
+    uint32_t 访问次数;
+    time_t 最后访问时间;
+} 内存区域;
 
 typedef struct {
-    vm_address_t address;
-    size_t size;
-    void* buffer;
-    int operation; // 0 for read, 1 for write
-    void* result;  // 用于存储操作结果
-} MemoryRequest;
+    int 操作;  // 0 表示读取，1 表示写入
+    vm_address_t 地址;
+    void* 缓冲区;
+    size_t 大小;
+    void* 结果;
+} 内存请求;
 
-int 初始化内存模块(pid_t pid);
+typedef struct {
+    size_t 页面大小;
+    int 线程数量;
+    int 最大等待请求数;
+    int 初始缓存区域数;
+} 内存模块配置;
+
+// 初始化内存模块
+int 初始化内存模块(pid_t pid, 内存模块配置* 配置);
+
+// 关闭内存模块
 void 关闭内存模块();
 
-void* 读任意地址(vm_address_t address, size_t size);
-int 写任意地址(vm_address_t address, const void* data, size_t size);
+// 读取指定地址的内存
+void* 读任意地址(vm_address_t 地址, size_t 大小);
 
-int32_t 读内存i32(vm_address_t address);
-int64_t 读内存i64(vm_address_t address);
-float 读内存f32(vm_address_t address);
-double 读内存f64(vm_address_t address);
+// 写入指定地址的内存
+int 写任意地址(vm_address_t 地址, const void* 数据, size_t 大小);
 
-int 写内存i32(vm_address_t address, int32_t value);
-int 写内存i64(vm_address_t address, int64_t value);
-int 写内存f32(vm_address_t address, float value);
-int 写内存f64(vm_address_t address, double value);
+// 读取特定类型的内存
+int32_t 读内存i32(vm_address_t 地址);
+int64_t 读内存i64(vm_address_t 地址);
+float   读内存f32(vm_address_t 地址);
+double  读内存f64(vm_address_t 地址);
 
-MemoryRegion* get_or_create_page(vm_address_t address);
-void* 处理内存请求(void* arg);
+// 写入特定类型的内存
+int 写内存i32(vm_address_t 地址, int32_t 值);
+int 写内存i64(vm_address_t 地址, int64_t 值);
+int 写内存f32(vm_address_t 地址, float 值);
+int 写内存f64(vm_address_t 地址, double 值);
 
-#endif // MEMORY_MODULE_H
+// 在指定范围内搜索内存
+vm_address_t 查找内存(const void* 数据, size_t 大小, vm_address_t 开始地址, vm_address_t 结束地址);
+
+// 读取进程内存
+int 读取进程内存(vm_address_t 地址, void* 缓冲区, size_t 大小);
+
+// 写入进程内存
+int 写入进程内存(vm_address_t 地址, const void* 数据, size_t 大小);
+
+// 清理未使用的页面
+void 清理未使用页面(time_t 早于);
+
+// 内存对齐函数
+size_t 对齐(size_t 大小, size_t 对齐值);
+
+#endif // 内存模块_H
