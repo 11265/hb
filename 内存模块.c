@@ -15,7 +15,6 @@
 #define ALIGN4(size) (((size) + 3) & ~3)
 #define INITIAL_CACHED_REGIONS 100
 #define SMALL_ALLOCATION_THRESHOLD 256
-#define MEMORY_POOL_SIZE (1024 * 1024)  // 1 MB
 
 extern task_t target_task;
 static MemoryRegion *cached_regions = NULL;
@@ -379,7 +378,6 @@ mach_vm_address_t 获取模块基地址(const char* module_name) {
         } else {
             if (info.protection & VM_PROT_EXECUTE) {
                 char buffer[4096];
-                mach_vm_size_t bytes
                 mach_vm_size_t bytes_read;
                 kr = vm_read_overwrite(target_task, address, sizeof(buffer), (vm_address_t)buffer, &bytes_read);
                 
