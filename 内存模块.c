@@ -11,6 +11,14 @@
 #define PAGE_MASK (~(PAGE_SIZE - 1))
 #define LARGE_MAPPING_THRESHOLD (1024 * 1024)  // 1MB threshold for large mappings
 
+#define MEMORY_POOL_SIZE (1024 * 1024)  // 1MB memory pool
+#define MAX_SMALL_ALLOCATION 256  // Maximum size for small allocations
+
+typedef struct MemoryBlock {
+    size_t size;
+    struct MemoryBlock* next;
+} MemoryBlock;
+
 typedef struct {
     pthread_t thread;
     int id;
@@ -30,6 +38,90 @@ static pthread_cond_t request_cond = PTHREAD_COND_INITIALIZER;
 static MemoryRequest pending_requests[MAX_PENDING_REQUESTS];
 static int num_pending_requests = 0;
 static int stop_threads = 0;
+
+// Memory pool variables
+static char* memory_pool = NULL;
+static MemoryBlock* free_list = NULL;
+static pthread_mutex_t pool_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void init_memory_pool() {
+    memory_pool = (char*)malloc(MEMORY_POOL_SIZE);
+    if (memory_pool == NULL) {
+        fprintf(stderr, "Failed to allocate memory pool\n");
+        exit(1);
+    }
+    
+    free_list = (MemoryBlock*)memory_pool;
+    free_list->size = MEMORY_POOL_SIZE - sizeof(MemoryBlock);
+    free_list->next = NULL;
+}
+
+void* pool_malloc(size_t size) {
+    size = ALIGN4(size + sizeof(MemoryBlock));
+    
+    pthread_mutex_lock(&pool_mutex);
+    
+    MemoryBlock* prev = NULL;
+    MemoryBlock* current = free_list;
+    
+    while (current != NULL) {
+        if (current->size >= size) {
+            if (current->size > size + sizeof(MemoryBlock)) {
+                MemoryBlock* new_block = (MemoryBlock*)((char*)current + size);
+                new_block->size = current->size - size;
+                new_block->next = current->next;
+                current->size = size;
+                
+                if (prev == NULL) {
+                    free_list = new_block;
+                } else {
+                    prev->next = new_block;
+                }
+            } else {
+                if (prev == NULL) {
+                    free_list = current->next;
+                } else {
+                    prev->next = current->next;
+                }
+            }
+            
+            pthread_mutex_unlock(&pool_mutex);
+            return (char*)current + sizeof(MemoryBlock);
+        }
+        
+        prev = current;
+        current = current->next;
+    }
+    
+    pthread_mutex_unlock(&pool_mutex);
+    return NULL;
+}
+
+void pool_free(void* ptr) {
+    if (ptr == NULL || ptr < (void*)memory_pool || ptr >= (void*)(memory_pool + MEMORY_POOL_SIZE)) {
+        return;
+    }
+    
+    MemoryBlock* block = (MemoryBlock*)((char*)ptr - sizeof(MemoryBlock));
+    
+    pthread_mutex_lock(&pool_mutex);
+    
+    block->next = free_list;
+    free_list = block;
+    
+    // Coalesce adjacent free blocks
+    MemoryBlock* current = free_list;
+    while (current != NULL && current->next != NULL) {
+        if ((char*)current + current->size == (char*)current->next) {
+            current->size += current->next->size;
+            current->next = current->next->next;
+        } else {
+            current = current->next;
+        }
+    }
+    
+    pthread_mutex_unlock(&pool_mutex);
+}
 
 MemoryRegion* get_or_create_mapping(vm_address_t address, size_t size) {
     pthread_mutex_lock(&regions_mutex);
@@ -100,7 +192,14 @@ void* 读任意地址(vm_address_t address, size_t size) {
     }
     
     size_t offset = address - region->base_address;
-    void* buffer = malloc(size);
+    void* buffer;
+    
+    if (size <= MAX_SMALL_ALLOCATION) {
+        buffer = pool_malloc(size);
+    } else {
+        buffer = malloc(size);
+    }
+    
     if (!buffer) {
         return NULL;
     }
@@ -134,7 +233,7 @@ int32_t 读内存i32(vm_address_t address) {
     void* data = 读任意地址(address, sizeof(int32_t));
     if (data) {
         value = *(int32_t*)data;
-        free(data);
+        pool_free(data);
     }
     return value;
 }
@@ -144,7 +243,7 @@ int64_t 读内存i64(vm_address_t address) {
     void* data = 读任意地址(address, sizeof(int64_t));
     if (data) {
         value = *(int64_t*)data;
-        free(data);
+        pool_free(data);
     }
     return value;
 }
@@ -154,7 +253,7 @@ float 读内存f32(vm_address_t address) {
     void* data = 读任意地址(address, sizeof(float));
     if (data) {
         value = *(float*)data;
-        free(data);
+        pool_free(data);
     }
     return value;
 }
@@ -164,7 +263,7 @@ double 读内存f64(vm_address_t address) {
     void* data = 读任意地址(address, sizeof(double));
     if (data) {
         value = *(double*)data;
-        free(data);
+        pool_free(data);
     }
     return value;
 }
@@ -227,6 +326,8 @@ int 初始化内存模块(pid_t pid) {
         return -1;
     }
     
+    init_memory_pool();
+    
     for (int i = 0; i < NUM_THREADS; i++) {
         thread_pool[i].id = i;
         pthread_create(&thread_pool[i].thread, NULL, mapper_thread_func, &thread_pool[i]);
@@ -250,6 +351,10 @@ void 关闭内存模块() {
     free(cached_regions);
     cached_regions = NULL;
     num_cached_regions = 0;
+    
+    free(memory_pool);
+    memory_pool = NULL;
+    free_list = NULL;
     
     mach_port_deallocate(mach_task_self(), target_task);
 }
