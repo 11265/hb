@@ -405,21 +405,26 @@ mach_vm_address_t 获取模块基地址(const char* module_name) {
                             if (lc->cmd == LC_SEGMENT_64) {
                                 struct segment_command_64 *seg = (struct segment_command_64 *)lc;
                                 if (strcmp(seg->segname, "__TEXT") == 0) {
-                                    printf("发现__TEXT段\n");
+                                    printf("发现__TEXT段，vmaddr: 0x%llx\n", seg->vmaddr);
                                     
-                                    char path[1024];
+                                    char path[256];  // 减小缓冲区大小
                                     mach_vm_size_t path_len = sizeof(path);
-                                    kr = vm_read_overwrite(target_task, seg->vmaddr, path_len, (vm_address_t)path, &bytes_read);
+                                    mach_vm_address_t read_address = address + (seg->vmaddr - seg->fileoff);  // 计算正确的读取地址
+                                    
+                                    printf("尝试读取地址: 0x%llx\n", read_address);
+                                    
+                                    kr = vm_read_overwrite(target_task, read_address, path_len, (vm_address_t)path, &bytes_read);
                                     
                                     if (kr == KERN_SUCCESS && bytes_read > 0) {
-                                        printf("读取路径: %s\n", path);
+                                        path[bytes_read - 1] = '\0';  // 确保字符串正确终止
+                                        printf("读取路径成功: %s\n", path);
                                         
                                         if (strstr(path, module_name) != NULL) {
                                             printf("找到模块 %s，基地址: 0x%llx\n", module_name, address);
                                             return address;
                                         }
                                     } else {
-                                        printf("无法读取路径，错误码: %d\n", kr);
+                                        printf("无法读取路径，错误码: %d (%s)\n", kr, mach_error_string(kr));
                                     }
                                 }
                             }
