@@ -56,7 +56,11 @@ void init_memory_pool() {
     free_list->next = NULL;
 }
 
-void* pool_malloc(size_t size) {
+void* 内存分配(size_t size) {
+    if (size > MAX_SMALL_ALLOCATION) {
+        return malloc(size);
+    }
+
     size = ALIGN4(size + sizeof(MemoryBlock));
     
     pthread_mutex_lock(&pool_mutex);
@@ -94,11 +98,16 @@ void* pool_malloc(size_t size) {
     }
     
     pthread_mutex_unlock(&pool_mutex);
-    return NULL;
+    return malloc(size);  // 如果内存池中没有足够的空间,使用系统的malloc
 }
 
-void pool_free(void* ptr) {
-    if (ptr == NULL || ptr < (void*)memory_pool || ptr >= (void*)(memory_pool + MEMORY_POOL_SIZE)) {
+void 内存释放(void* ptr) {
+    if (ptr == NULL) {
+        return;
+    }
+
+    if (ptr < (void*)memory_pool || ptr >= (void*)(memory_pool + MEMORY_POOL_SIZE)) {
+        free(ptr);  // 如果不是来自内存池的内存,使用系统的free
         return;
     }
     
@@ -192,13 +201,7 @@ void* 读任意地址(vm_address_t address, size_t size) {
     }
     
     size_t offset = address - region->base_address;
-    void* buffer;
-    
-    if (size <= MAX_SMALL_ALLOCATION) {
-        buffer = pool_malloc(size);
-    } else {
-        buffer = malloc(size);
-    }
+    void* buffer = 内存分配(size);
     
     if (!buffer) {
         return NULL;
@@ -207,6 +210,8 @@ void* 读任意地址(vm_address_t address, size_t size) {
     memcpy(buffer, (char*)region->mapped_memory + offset, size);
     return buffer;
 }
+
+// 继续上一部分的代码...
 
 int 写任意地址(vm_address_t address, const void* data, size_t size) {
     MemoryRegion* region = get_or_create_mapping(address, size);
@@ -229,41 +234,33 @@ int 写任意地址(vm_address_t address, const void* data, size_t size) {
 }
 
 int32_t 读内存i32(vm_address_t address) {
-    int32_t value = 0;
-    void* data = 读任意地址(address, sizeof(int32_t));
-    if (data) {
-        value = *(int32_t*)data;
-        pool_free(data);
+    int32_t value;
+    if (读任意地址(address, &value, sizeof(int32_t)) == NULL) {
+        return 0;
     }
     return value;
 }
 
 int64_t 读内存i64(vm_address_t address) {
-    int64_t value = 0;
-    void* data = 读任意地址(address, sizeof(int64_t));
-    if (data) {
-        value = *(int64_t*)data;
-        pool_free(data);
+    int64_t value;
+    if (读任意地址(address, &value, sizeof(int64_t)) == NULL) {
+        return 0;
     }
     return value;
 }
 
 float 读内存f32(vm_address_t address) {
-    float value = 0;
-    void* data = 读任意地址(address, sizeof(float));
-    if (data) {
-        value = *(float*)data;
-        pool_free(data);
+    float value;
+    if (读任意地址(address, &value, sizeof(float)) == NULL) {
+        return 0.0f;
     }
     return value;
 }
 
 double 读内存f64(vm_address_t address) {
-    double value = 0;
-    void* data = 读任意地址(address, sizeof(double));
-    if (data) {
-        value = *(double*)data;
-        pool_free(data);
+    double value;
+    if (读任意地址(address, &value, sizeof(double)) == NULL) {
+        return 0.0;
     }
     return value;
 }
@@ -284,12 +281,12 @@ int 写内存f64(vm_address_t address, double value) {
     return 写任意地址(address, &value, sizeof(double));
 }
 
-void* mapper_thread_func(void* arg) {
+void* worker_thread(void* arg) {
     ThreadInfo* info = (ThreadInfo*)arg;
     
     while (!stop_threads) {
         MemoryRequest request;
-        int have_request = 0;
+        int has_request = 0;
         
         pthread_mutex_lock(&requests_mutex);
         while (num_pending_requests == 0 && !stop_threads) {
@@ -298,15 +295,18 @@ void* mapper_thread_func(void* arg) {
         
         if (num_pending_requests > 0) {
             request = pending_requests[--num_pending_requests];
-            have_request = 1;
+            has_request = 1;
         }
         pthread_mutex_unlock(&requests_mutex);
         
-        if (have_request) {
-            if (request.operation == 0) {  // Read operation
-                request.result = 读任意地址(request.address, request.size);
-            } else {  // Write operation
-                request.result = (void*)(intptr_t)写任意地址(request.address, request.buffer, request.size);
+        if (has_request) {
+            switch (request.operation) {
+                case 0: // Read
+                    request.result = 读任意地址(request.address, request.size);
+                    break;
+                case 1: // Write
+                    request.result = (void*)(intptr_t)写任意地址(request.address, request.buffer, request.size);
+                    break;
             }
         }
     }
@@ -321,7 +321,7 @@ int 初始化内存模块(pid_t pid) {
         return -1;
     }
     
-    cached_regions = malloc(max_cached_regions * sizeof(MemoryRegion));
+    cached_regions = (MemoryRegion*)malloc(max_cached_regions * sizeof(MemoryRegion));
     if (!cached_regions) {
         return -1;
     }
@@ -330,7 +330,7 @@ int 初始化内存模块(pid_t pid) {
     
     for (int i = 0; i < NUM_THREADS; i++) {
         thread_pool[i].id = i;
-        pthread_create(&thread_pool[i].thread, NULL, mapper_thread_func, &thread_pool[i]);
+        pthread_create(&thread_pool[i].thread, NULL, worker_thread, &thread_pool[i]);
     }
     
     return 0;
@@ -347,14 +347,44 @@ void 关闭内存模块() {
     for (int i = 0; i < num_cached_regions; i++) {
         munmap(cached_regions[i].mapped_memory, cached_regions[i].mapped_size);
     }
-    
     free(cached_regions);
-    cached_regions = NULL;
-    num_cached_regions = 0;
     
     free(memory_pool);
-    memory_pool = NULL;
-    free_list = NULL;
     
     mach_port_deallocate(mach_task_self(), target_task);
+}
+
+// Helper function to add a request to the queue
+static int add_request(int operation, vm_address_t address, void* buffer, size_t size) {
+    pthread_mutex_lock(&requests_mutex);
+    
+    if (num_pending_requests >= MAX_PENDING_REQUESTS) {
+        pthread_mutex_unlock(&requests_mutex);
+        return -1;
+    }
+    
+    MemoryRequest* request = &pending_requests[num_pending_requests++];
+    request->operation = operation;
+    request->address = address;
+    request->buffer = buffer;
+    request->size = size;
+    request->result = NULL;
+    
+    pthread_cond_signal(&request_cond);
+    pthread_mutex_unlock(&requests_mutex);
+    
+    return 0;
+}
+
+// These functions can be used to queue read/write operations for the worker threads
+void* 异步读任意地址(vm_address_t address, size_t size) {
+    if (add_request(0, address, NULL, size) != 0) {
+        return NULL;
+    }
+    // In a real implementation, you'd wait for the result here
+    return NULL;
+}
+
+int 异步写任意地址(vm_address_t address, const void* data, size_t size) {
+    return add_request(1, address, (void*)data, size);
 }
