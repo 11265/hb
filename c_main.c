@@ -8,12 +8,12 @@
 #include <stdint.h>
 
 int c_main(void) {
-    pid_t target_pid = get_pid_by_name("pvz");
+    pid_t target_pid = get_pid_by_name("goba pro");
     if (target_pid == -1) {
         printf("未找到目标进程\n");
         return 1;
     }
-    printf("找到目标进程 pvz, PID: %d\n", target_pid);
+    printf("找到目标进程 goba pro, PID: %d\n", target_pid);
 
     if (初始化内存模块(target_pid) != 0) {
         printf("内存模块初始化失败\n");
@@ -21,9 +21,18 @@ int c_main(void) {
     }
     printf("内存模块初始化成功\n");
 
-    vm_address_t test_address = 0x106befe70; // 示例地址，请根据实际情况修改
+    // 获取 "goba pro" 模块的基地址
+    mach_vm_address_t base_address = 获取模块基地址("goba pro");
+    if (base_address) {
+        printf("模块 'goba pro' 的基地址: 0x%llx\n", base_address);
+    } else {
+        printf("未找到模块 'goba pro'\n");
+        关闭内存模块();
+        return 1;
+    }
 
-
+    // 使用基地址进行后续操作
+    vm_address_t test_address = base_address +  0xD94B0 +    0x634; // 示例偏移，请根据实际情况修改
 
     // 读取其他数据类型
     printf("读取 int32: %d\n", 读内存i32(test_address));
