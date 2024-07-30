@@ -7,7 +7,7 @@
 #include <string.h>
 
 int c_main(void) {
-    pid_t target_pid = 根据进程名获取PID("pvz");
+    pid_t target_pid = get_pid_by_name("pvz");
     if (target_pid == -1) {
         printf("未找到目标进程\n");
         return 1;
@@ -20,7 +20,7 @@ int c_main(void) {
     }
     printf("内存模块初始化成功\n");
 
-    vm_address_t test_address = 0x10507E404; // 示例地址，请根据实际情况修改
+    vm_address_t test_address = 0x12345000; // 示例地址，请根据实际情况修改
 
     // 测试写入和读取各种数据类型
     int32_t test_i32 = 42;
@@ -55,6 +55,5 @@ int c_main(void) {
     }
 
     关闭内存模块();
-    printf("关闭内存模块\n");
     return 0;
 }
