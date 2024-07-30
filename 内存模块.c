@@ -10,25 +10,13 @@
 #define PAGE_SIZE 4096
 #define PAGE_MASK (~(PAGE_SIZE - 1))
 
-typedef struct {
-    pthread_t thread;
-    int id;
-} ThreadInfo;
-
 static MemoryRegion *cached_regions = NULL;
 static int num_cached_regions = 0;
 static int max_cached_regions = INITIAL_CACHED_REGIONS;
 static pid_t target_pid;
 static task_t target_task;
 
-static ThreadInfo thread_pool[NUM_THREADS];
 static pthread_mutex_t regions_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t requests_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t request_cond = PTHREAD_COND_INITIALIZER;
-
-static MemoryRequest pending_requests[MAX_PENDING_REQUESTS];
-static int num_pending_requests = 0;
-static int stop_threads = 0;
 
 MemoryPool memory_pool;
 pthread_mutex_t memory_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -305,35 +293,6 @@ int 写内存f64(vm_address_t address, double value) {
     return 写任意地址(address, &value, sizeof(double));
 }
 
-static void* worker_thread(void* arg) {
-    ThreadInfo* info = (ThreadInfo*)arg;
-    
-    while (1) {
-        pthread_mutex_lock(&requests_mutex);
-        while (num_pending_requests == 0 && !stop_threads) {
-            pthread_cond_wait(&request_cond, &requests_mutex);
-        }
-        
-        if (stop_threads) {
-            pthread_mutex_unlock(&requests_mutex);
-            break;
-        }
-        
-        MemoryRequest request = pending_requests[--num_pending_requests];
-        pthread_mutex_unlock(&requests_mutex);
-        
-        if (request.operation == 0) { // 读操作
-            MemoryReadResult* result = (MemoryReadResult*)request.result;
-            *result = 读任意地址(request.address, request.size);
-        } else { // 写操作
-            int* result = (int*)request.result;
-            *result = 写任意地址(request.address, request.buffer, request.size);
-        }
-    }
-    
-    return NULL;
-}
-
 int 初始化内存模块(pid_t pid) {
     target_pid = pid;
     kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &target_task);
@@ -348,124 +307,14 @@ int 初始化内存模块(pid_t pid) {
     
     初始化内存池(&memory_pool);
     
-    for (int i = 0; i < NUM_THREADS; i++) {
-        thread_pool[i].id = i;
-        if (pthread_create(&thread_pool[i].thread, NULL, worker_thread, &thread_pool[i]) != 0) {
-            return -1;
-        }
-    }
-    
     return 0;
 }
 
 void 关闭内存模块() {
-    pthread_mutex_lock(&requests_mutex);
-    stop_threads = 1;
-    pthread_cond_broadcast(&request_cond);
-    pthread_mutex_unlock(&requests_mutex);
-    
-    for (int i = 0; i < NUM_THREADS; i++) {
-        pthread_join(thread_pool[i].thread, NULL);
-    }
-    
     for (int i = 0; i < num_cached_regions; i++) {
         munmap(cached_regions[i].mapped_memory, cached_regions[i].mapped_size);
     }
     
     free(cached_regions);
     销毁内存池(&memory_pool);
-}
-
-static int add_request(vm_address_t address, size_t size, void* buffer, int operation, void* result) {
-    pthread_mutex_lock(&requests_mutex);
-    
-    if (num_pending_requests >= MAX_PENDING_REQUESTS) {
-        pthread_mutex_unlock(&requests_mutex);
-        return -1;
-    }
-    
-    pending_requests[num_pending_requests].address = address;
-    pending_requests[num_pending_requests].size = size;
-    pending_requests[num_pending_requests].buffer = buffer;
-    pending_requests[num_pending_requests].operation = operation;
-    pending_requests[num_pending_requests].result = result;
-    
-    num_pending_requests++;
-    
-    pthread_cond_signal(&request_cond);
-    pthread_mutex_unlock(&requests_mutex);
-    
-    return 0;
-}
-
-MemoryReadResult 异步读任意地址(vm_address_t address, size_t size) {
-    MemoryReadResult result = {NULL, 0};
-    if (add_request(address, size, NULL, 0, &result) != 0) {
-        return result;
-    }
-    return result;
-}
-
-int 异步写任意地址(vm_address_t address, const void* data, size_t size) {
-    int result = -1;
-    if (add_request(address, size, (void*)data, 1, &result) != 0) {
-        return -1;
-    }
-    return result;
-}
-
-int32_t 异步读内存i32(vm_address_t address) {
-    MemoryReadResult result = 异步读任意地址(address, sizeof(int32_t));
-    if (!result.data) {
-        return 0;
-    }
-    int32_t value = *(int32_t*)result.data;
-    if (result.from_pool) {
-        内存池释放(&memory_pool, result.data);
-    } else {
-        free(result.data);
-    }
-    return value;
-}
-
-int64_t 异步读内存i64(vm_address_t address) {
-    MemoryReadResult result = 异步读任意地址(address, sizeof(int64_t));
-    if (!result.data) {
-        return 0;
-    }
-    int64_t value = *(int64_t*)result.data;
-    if (result.from_pool) {
-        内存池释放(&memory_pool, result.data);
-    } else {
-        free(result.data);
-    }
-    return value;
-}
-
-float 异步读内存f32(vm_address_t address) {
-    MemoryReadResult result = 异步读任意地址(address, sizeof(float));
-    if (!result.data) {
-        return 0.0f;
-    }
-    float value = *(float*)result.data;
-    if (result.from_pool) {
-        内存池释放(&memory_pool, result.data);
-    } else {
-        free(result.data);
-    }
-    return value;
-}
-
-double 异步读内存f64(vm_address_t address) {
-    MemoryReadResult result = 异步读任意地址(address, sizeof(double));
-    if (!result.data) {
-        return 0.0;
-    }
-    double value = *(double*)result.data;
-    if (result.from_pool) {
-        内存池释放(&memory_pool, result.data);
-    } else {
-        free(result.data);
-    }
-    return value;
 }
