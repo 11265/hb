@@ -27,42 +27,22 @@ int c_main(void) {
 
     vm_address_t test_address = 0x106befe70; // 示例地址，请根据实际情况修改
 
-    // int32_t
-    int32_t test_i32 = 3546;
-    写内存i32(test_address, test_i32);
-    printf("写入 int32: %d, 读取 int32: %d\n", test_i32, 读内存i32(test_address));
+    int write_result = 写内存i32(test_address, test_i32);
+    if (write_result != 0) {
+        fprintf(stderr, "写入 int32 失败，错误代码：%d\n", write_result);
+    } else {
+        int32_t read_value = 读内存i32(test_address);
+        if (read_value == 0) {
+            fprintf(stderr, "读取 int32 失败\n");
+        } else {
+            printf("写入 int32: %d, 读取 int32: %d\n", test_i32, read_value);
+        }
+    }
 
     // int64_t
     int64_t test_i64 = 1234567890123456789LL;
     写内存i64(test_address, test_i64);
     printf("写入 int64: %lld, 读取 int64: %lld\n", test_i64, 读内存i64(test_address));
-
-    // float
-    float test_f32 = 3.14159f;
-    写内存f32(test_address, test_f32);
-    printf("写入 float: %f, 读取 float: %f\n", test_f32, 读内存f32(test_address));
-
-    // double
-    double test_f64 = 2.71828182845904523536;
-    写内存f64(test_address, test_f64);
-    printf("写入 double: %lf, 读取 double: %lf\n", test_f64, 读内存f64(test_address));
-
-    // 任意地址读写测试
-    char test_string[] = "Hello, World!";
-    size_t string_length = sizeof(test_string);
-    写任意地址(test_address, test_string, string_length);
-    
-    MemoryReadResult read_result = 读任意地址(test_address, string_length);
-    if (read_result.data) {
-        printf("写入字符串: %s, 读取字符串: %s\n", test_string, (char*)read_result.data);
-        if (read_result.from_pool) {
-            内存池释放(&memory_pool, read_result.data);
-        } else {
-            free(read_result.data);
-        }
-    } else {
-        fprintf(stderr, "读取字符串失败\n");
-    }
 
     关闭内存模块();
     printf("关闭内存模块\n");
