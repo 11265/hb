@@ -78,15 +78,19 @@ void* 内存池分配(MemoryPool* pool, size_t size) {
 }
 
 void 内存池释放(MemoryPool* pool, void* ptr) {
+    if (!ptr) return;
+    
     MemoryChunk* chunk = (MemoryChunk*)((char*)ptr - sizeof(MemoryChunk));
     chunk->next = pool->free_list;
     pool->free_list = chunk;
 }
 
 void 销毁内存池(MemoryPool* pool) {
-    free(pool->pool);
-    pool->pool = NULL;
-    pool->free_list = NULL;
+    if (pool && pool->pool) {
+        free(pool->pool);
+        pool->pool = NULL;
+        pool->free_list = NULL;
+    }
 }
 
 MemoryRegion* get_or_create_page(vm_address_t address) {
@@ -150,10 +154,11 @@ MemoryRegion* get_or_create_page(vm_address_t address) {
     return &cached_regions[num_cached_regions - 1];
 }
 
-void* 读任意地址(vm_address_t address, size_t size) {
+MemoryReadResult 读任意地址(vm_address_t address, size_t size) {
+    MemoryReadResult result = {NULL, 0};
     MemoryRegion* region = get_or_create_page(address);
     if (!region) {
-        return NULL;
+        return result;
     }
     
     size_t offset = address - region->base_address;
@@ -161,12 +166,16 @@ void* 读任意地址(vm_address_t address, size_t size) {
     int use_memory_pool = (size <= SMALL_ALLOCATION_THRESHOLD);
     if (use_memory_pool) {
         buffer = 内存池分配(&memory_pool, size);
+        if (!buffer) {
+            use_memory_pool = 0;
+            buffer = malloc(size);
+        }
     } else {
         buffer = malloc(size);
     }
     
     if (!buffer) {
-        return NULL;
+        return result;
     }
     
     if (offset + size > PAGE_SIZE) {
@@ -174,23 +183,29 @@ void* 读任意地址(vm_address_t address, size_t size) {
         memcpy(buffer, (char*)region->mapped_memory + offset, first_part);
         
         size_t remaining = size - first_part;
-        void* remaining_data = 读任意地址(address + first_part, remaining);
-        if (!remaining_data) {
+        MemoryReadResult remaining_result = 读任意地址(address + first_part, remaining);
+        if (!remaining_result.data) {
             if (use_memory_pool) {
                 内存池释放(&memory_pool, buffer);
             } else {
                 free(buffer);
             }
-            return NULL;
+            return result;
         }
         
-        memcpy((char*)buffer + first_part, remaining_data, remaining);
-        // 这里不需要释放 remaining_data，因为它是由递归调用的 读任意地址 分配的
+        memcpy((char*)buffer + first_part, remaining_result.data, remaining);
+        if (remaining_result.from_pool) {
+            内存池释放(&memory_pool, remaining_result.data);
+        } else {
+            free(remaining_result.data);
+        }
     } else {
         memcpy(buffer, (char*)region->mapped_memory + offset, size);
     }
     
-    return buffer;
+    result.data = buffer;
+    result.from_pool = use_memory_pool;
+    return result;
 }
 
 int 写任意地址(vm_address_t address, const void* data, size_t size) {
@@ -213,43 +228,59 @@ int 写任意地址(vm_address_t address, const void* data, size_t size) {
 }
 
 int32_t 读内存i32(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(int32_t));
-    if (!data) {
+    MemoryReadResult result = 读任意地址(address, sizeof(int32_t));
+    if (!result.data) {
         return 0;
     }
-    int32_t result = *(int32_t*)data;
-    内存池释放(&memory_pool, data);
-    return result;
+    int32_t value = *(int32_t*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
 }
 
 int64_t 读内存i64(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(int64_t));
-    if (!data) {
+    MemoryReadResult result = 读任意地址(address, sizeof(int64_t));
+    if (!result.data) {
         return 0;
     }
-    int64_t result = *(int64_t*)data;
-    内存池释放(&memory_pool, data);
-    return result;
+    int64_t value = *(int64_t*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
 }
 
 float 读内存f32(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(float));
-    if (!data) {
+    MemoryReadResult result = 读任意地址(address, sizeof(float));
+    if (!result.data) {
         return 0.0f;
     }
-    float result = *(float*)data;
-    内存池释放(&memory_pool, data);
-    return result;
+    float value = *(float*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
 }
 
 double 读内存f64(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(double));
-    if (!data) {
+    MemoryReadResult result = 读任意地址(address, sizeof(double));
+    if (!result.data) {
         return 0.0;
     }
-    double result = *(double*)data;
-    内存池释放(&memory_pool, data);
-    return result;
+    double value = *(double*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
 }
 
 int 写内存i32(vm_address_t address, int32_t value) {
@@ -288,29 +319,15 @@ void* 处理内存请求(void* arg) {
         }
         pthread_mutex_unlock(&requests_mutex);
 
-        if (request.operation == 1) { // 写操作
+if (request.operation == 1) { // 写操作
             int result = 写任意地址(request.address, request.buffer, request.size);
             *(int*)request.result = result;
         } else { // 读操作
-            void* result = 读任意地址(request.address, request.size);
-            if (result) {
-                memcpy(request.result, result, request.size);
-                if (request.size <= SMALL_ALLOCATION_THRESHOLD) {
-                    内存池释放(&memory_pool, result);
-                } else {
-                    free(result);
-                }
-            } else {
-                memset(request.result, 0, request.size);
-            }
+            MemoryReadResult result = 读任意地址(request.address, request.size);
+            *(MemoryReadResult*)request.result = result;
         }
     }
-    
     return NULL;
-}
-
-static void* mapper_thread_func(void* arg) {
-    return 处理内存请求(arg);
 }
 
 int 初始化内存模块(pid_t pid) {
@@ -319,36 +336,36 @@ int 初始化内存模块(pid_t pid) {
     if (kr != KERN_SUCCESS) {
         return -1;
     }
-    
-    cached_regions = malloc(sizeof(MemoryRegion) * max_cached_regions);
+
+    cached_regions = malloc(max_cached_regions * sizeof(MemoryRegion));
     if (!cached_regions) {
         return -1;
     }
-    
+
     初始化内存池(&memory_pool);
-    
+
     for (int i = 0; i < NUM_THREADS; i++) {
         thread_pool[i].id = i;
-        if (pthread_create(&thread_pool[i].thread, NULL, mapper_thread_func, &thread_pool[i].id) != 0) {
-            return -1;
-        }
+        pthread_create(&thread_pool[i].thread, NULL, 处理内存请求, &thread_pool[i].id);
     }
-    
+
     return 0;
 }
 
 void 关闭内存模块() {
+    pthread_mutex_lock(&requests_mutex);
     stop_threads = 1;
     pthread_cond_broadcast(&request_cond);
-    
+    pthread_mutex_unlock(&requests_mutex);
+
     for (int i = 0; i < NUM_THREADS; i++) {
         pthread_join(thread_pool[i].thread, NULL);
     }
-    
+
     for (int i = 0; i < num_cached_regions; i++) {
         munmap(cached_regions[i].mapped_memory, cached_regions[i].mapped_size);
     }
-    
+
     free(cached_regions);
     销毁内存池(&memory_pool);
 }
