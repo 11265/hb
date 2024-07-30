@@ -20,7 +20,7 @@ int c_main(void) {
     }
     printf("内存模块初始化成功\n");
 
-    vm_address_t test_address = 0x12345000; // 示例地址，请根据实际情况修改
+    vm_address_t test_address = 0x106BEFE70; // 示例地址，请根据实际情况修改
 
     // 读取其他数据类型
     printf("读取 int32: %d\n", 读内存i32(test_address));
