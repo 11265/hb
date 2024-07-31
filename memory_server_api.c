@@ -233,45 +233,7 @@ ProcessInfo* enumprocess_native(size_t* count) {
     return result;
 }
 
-// 挂起进程
-int suspend_process(int pid) {
-    task_t task;
-    kern_return_t kr;
 
-    kr = task_for_pid(mach_task_self(), pid, &task);
-    if (kr != KERN_SUCCESS) {
-        debug_log("错误:task_for_pid失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
-        return -1;
-    }
-
-    kr = task_suspend(task);
-    if (kr != KERN_SUCCESS) {
-        debug_log("错误:task_suspend失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
-        return -1;
-    }
-
-    return 0;
-}
-
-// 恢复进程
-int resume_process(int pid) {
-    task_t task;
-    kern_return_t kr;
-
-    kr = task_for_pid(mach_task_self(), pid, &task);
-    if (kr != KERN_SUCCESS) {
-        debug_log("错误:task_for_pid失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
-        return -1;
-    }
-
-    kr = task_resume(task);
-    if (kr != KERN_SUCCESS) {
-        debug_log("错误:task_resume失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
-        return -1;
-    }
-
-    return 0;
-}
 
 // 枚举模块
 ModuleInfo* enummodule_native(int pid, size_t* count) {
