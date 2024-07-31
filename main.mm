@@ -640,6 +640,7 @@ extern "C" int native_init()
 extern "C" int c_main() {
     // 打印欢迎语句
     NSLog(@"欢迎使用这个iOS应用！");
+    debug_log("Warning: proc_regionfilename is not available. Some ""functionality may be limited.\n");
     
     // 在这里实现您的主要逻辑
     
