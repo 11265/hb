@@ -20,7 +20,7 @@ jobs:
 
     - name: Build
       run: |
-        gcc -c memory_server_api.c -o memory_server_api.o
+        gcc -c memory_server_api.c -o memory_server_api.o -I/usr/include/mach
         gcc -c main.c -o main.o
         gcc memory_server_api.o main.o -o memory_server
 
