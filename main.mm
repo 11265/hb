@@ -15,7 +15,9 @@
 #include <iostream>
 #include <string>
 #include <vector>
+//#import <Foundation/Foundation.h>
 
+// 其他必要的头文件
 typedef struct
 {
     int pid;
@@ -635,9 +637,11 @@ extern "C" int native_init()
 
 
 //--------------------------------------------------
-int c_main() {
-
-    printf("内存模块已关闭\n");
-
+extern "C" int c_main() {
+    // 打印欢迎语句
+    NSLog(@"欢迎使用这个iOS应用！");
+    
+    // 在这里实现您的主要逻辑
+    
     return 0;
 }
