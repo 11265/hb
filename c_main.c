@@ -1,47 +1,117 @@
-// c_main.c
-
-#include "内存模块.h"
-#include "查找进程.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <mach/mach.h>
+#include <mach/vm_map.h>
 
-#define TARGET_PROCESS_NAME "pvz"
+#define PAGE_SIZE 4096
 
-int c_main() {
-    pid_t target_pid = get_pid_by_name(TARGET_PROCESS_NAME);
-    if (target_pid == -1) {
-        printf("无法找到目标进程: %s\n", TARGET_PROCESS_NAME);
+// 这个函数需要在内核扩展中实现
+extern kern_return_t replace_pte(task_t src_task, vm_address_t src_addr, 
+                                 task_t dst_task, vm_address_t dst_addr);
+
+static task_t target_task;
+
+int initialize_memory_module(pid_t target_pid) {
+    kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &target_task);
+    if (kr != KERN_SUCCESS) {
+        fprintf(stderr, "Failed to get task for pid %d: %s\n", target_pid, mach_error_string(kr));
+        return -1;
+    }
+    return 0;
+}
+
+void* read_memory(vm_address_t target_addr, size_t size) {
+    vm_address_t local_addr;
+    kern_return_t kr;
+
+    // 在本地进程中分配内存
+    kr = vm_allocate(mach_task_self(), &local_addr, size, VM_FLAGS_ANYWHERE);
+    if (kr != KERN_SUCCESS) {
+        fprintf(stderr, "Failed to allocate local memory: %s\n", mach_error_string(kr));
+        return NULL;
+    }
+
+    // 替换PTE
+    for (vm_address_t offset = 0; offset < size; offset += PAGE_SIZE) {
+        kr = replace_pte(mach_task_self(), local_addr + offset,
+                         target_task, target_addr + offset);
+        if (kr != KERN_SUCCESS) {
+            fprintf(stderr, "Failed to replace PTE: %s\n", mach_error_string(kr));
+            vm_deallocate(mach_task_self(), local_addr, size);
+            return NULL;
+        }
+    }
+
+    // 现在local_addr直接映射到目标进程的内存
+    void* buffer = malloc(size);
+    if (!buffer) {
+        vm_deallocate(mach_task_self(), local_addr, size);
+        return NULL;
+    }
+
+    memcpy(buffer, (void*)local_addr, size);
+    vm_deallocate(mach_task_self(), local_addr, size);
+
+    return buffer;
+}
+
+int write_memory(vm_address_t target_addr, const void* data, size_t size) {
+    vm_address_t local_addr;
+    kern_return_t kr;
+
+    // 在本地进程中分配内存
+    kr = vm_allocate(mach_task_self(), &local_addr, size, VM_FLAGS_ANYWHERE);
+    if (kr != KERN_SUCCESS) {
+        fprintf(stderr, "Failed to allocate local memory: %s\n", mach_error_string(kr));
+        return -1;
+    }
+
+    // 替换PTE
+    for (vm_address_t offset = 0; offset < size; offset += PAGE_SIZE) {
+        kr = replace_pte(mach_task_self(), local_addr + offset,
+                         target_task, target_addr + offset);
+        if (kr != KERN_SUCCESS) {
+            fprintf(stderr, "Failed to replace PTE: %s\n", mach_error_string(kr));
+            vm_deallocate(mach_task_self(), local_addr, size);
+            return -1;
+        }
+    }
+
+    // 直接写入，实际上是写入目标进程的内存
+    memcpy((void*)local_addr, data, size);
+
+    vm_deallocate(mach_task_self(), local_addr, size);
+    return 0;
+}
+
+// 使用示例
+int main(int argc, char* argv[]) {
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <target_pid>\n", argv[0]);
         return 1;
     }
 
-    printf("找到目标进程 %s, PID: %d\n", TARGET_PROCESS_NAME, target_pid);
-
-    if (初始化内存模块(target_pid) != 0) {
-        printf("初始化内存模块失败\n");
+    pid_t target_pid = atoi(argv[1]);
+    if (initialize_memory_module(target_pid) != 0) {
         return 1;
     }
 
-    printf("内存模块初始化成功\n");
-
-    // 测试读写不同类型的内存
-    vm_address_t test_address = 0x1060E1388; // 假设这是一个有效的内存地址
-
-    // 读取其他数据类型
-    printf("读取 int32: %d\n", 读内存i32(test_address));
-
-    // 测试写入和读取 int32_t
-    int32_t test_i32 = 12345;
-    if (写内存i32(test_address, test_i32) == 0) {
-        printf("写入 int32 成功: %d\n", test_i32);
-        printf("读取 int32: %d\n", 读内存i32(test_address));
-    } else {
-        printf("写入 int32 失败\n");
+    // 读取示例
+    vm_address_t target_addr = 0x1000; // 示例地址
+    size_t read_size = 100;
+    void* data = read_memory(target_addr, read_size);
+    if (data) {
+        printf("Read %zu bytes from address 0x%lx\n", read_size, target_addr);
+        free(data);
     }
 
-
-    关闭内存模块();
-    printf("内存模块已关闭\n");
+    // 写入示例
+    char write_data[] = "Hello, target process!";
+    if (write_memory(target_addr, write_data, strlen(write_data) + 1) == 0) {
+        printf("Wrote data to address 0x%lx\n", target_addr);
+    }
 
     return 0;
 }
