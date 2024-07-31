@@ -33,16 +33,8 @@ void* read_memory(vm_address_t target_addr, size_t size) {
         return NULL;
     }
 
-    // 替换PTE
-    for (vm_address_t offset = 0; offset < size; offset += MY_PAGE_SIZE) {
-        kr = replace_pte(mach_task_self(), local_addr + offset,
-                         target_task, target_addr + offset);
-        if (kr != KERN_SUCCESS) {
-            fprintf(stderr, "Failed to replace PTE: %s\n", mach_error_string(kr));
-            vm_deallocate(mach_task_self(), local_addr, size);
-            return NULL;
-        }
-    }
+    // 替换PTE的逻辑被省略或替换为其他逻辑
+    // 这里可以添加其他的逻辑来读取内存
 
     // 现在local_addr直接映射到目标进程的内存
     void* buffer = malloc(size);
@@ -68,16 +60,8 @@ int write_memory(vm_address_t target_addr, const void* data, size_t size) {
         return -1;
     }
 
-    // 替换PTE
-    for (vm_address_t offset = 0; offset < size; offset += MY_PAGE_SIZE) {
-        kr = replace_pte(mach_task_self(), local_addr + offset,
-                         target_task, target_addr + offset);
-        if (kr != KERN_SUCCESS) {
-            fprintf(stderr, "Failed to replace PTE: %s\n", mach_error_string(kr));
-            vm_deallocate(mach_task_self(), local_addr, size);
-            return -1;
-        }
-    }
+    // 替换PTE的逻辑被省略或替换为其他逻辑
+    // 这里可以添加其他的逻辑来写入内存
 
     // 直接写入，实际上是写入目标进程的内存
     memcpy((void*)local_addr, data, size);
@@ -85,6 +69,7 @@ int write_memory(vm_address_t target_addr, const void* data, size_t size) {
     vm_deallocate(mach_task_self(), local_addr, size);
     return 0;
 }
+
 
 // 使用示例
 int c_main(int argc, char *argv[]) {
