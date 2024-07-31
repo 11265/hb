@@ -545,3 +545,17 @@ int native_init() {
     }
     return 1;
 }
+
+
+int main(int argc, char *argv[]) {
+    // 这里可以调用你想要测试的函数
+    debug_log("程序开始运行\n");
+    
+    // 例如，你可以尝试获取当前进程ID
+    pid_t current_pid = get_pid_native();
+    debug_log("当前进程ID: %d\n", current_pid);
+    
+    // 更多测试代码可以添加在这里
+    
+    return 0;
+}
