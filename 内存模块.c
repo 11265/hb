@@ -72,7 +72,7 @@ MemoryRegion* get_or_create_page(vm_address_t address) {
     }
     
     mach_vm_size_t bytes_read;
-    kern_return_t kr = vm_read_overwrite(target_task, page_address, vm_page_size, (vm_address_t)mapped_memory, &bytes_read);
+    kern_return_t kr = vm_read_overwrite(target_task, page_address, vm_page_size, (vm_address_t)mapped_memory, &bytes_read);//
     if (kr != KERN_SUCCESS || bytes_read != vm_page_size) {
         munmap(mapped_memory, vm_page_size);
         pthread_mutex_unlock(&regions_mutex);
