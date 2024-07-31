@@ -632,10 +632,12 @@ extern "C" int native_init()
     return 1;
 }
 
-int main() {
-    printf("Memory Server 测试程序开始运行\n");
 
 
-    printf("\nMemory Server 测试程序结束\n");
+//--------------------------------------------------
+int c_main() {
+
+    printf("内存模块已关闭\n");
+
     return 0;
 }
