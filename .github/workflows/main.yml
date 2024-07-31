@@ -1,4 +1,4 @@
-name: Build Memory Server
+name: iOS Build
 
 on:
   push:
@@ -13,19 +13,33 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: Install dependencies
-      run: |
-        brew update
-        brew install gcc
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode.app
 
-    - name: Build
+    - name: Setup iOS SDK
       run: |
-        gcc -c -I/usr/include/mach
-        gcc -c main.c -o main.o
-        gcc  main.o -o memory_server
+        SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+        echo "SDKROOT=$SDKROOT" >> $GITHUB_ENV
 
-    - name: Upload artifact
+    - name: List directory contents
+      run: ls -la
+
+    - name: Compile C files
+      run: |
+        xcrun -sdk iphoneos clang -c 内存模块.c -o 内存模块.o -arch arm64 -mios-version-min=14.0 -Wno-incompatible-pointer-types
+        xcrun -sdk iphoneos clang -c c_main.c -o c_main.o -arch arm64 -mios-version-min=14.0
+        xcrun -sdk iphoneos clang -c 查找进程.c -o 查找进程.o -arch arm64 -mios-version-min=14.0
+
+    - name: Assemble main.s
+      run: |
+        xcrun -sdk iphoneos clang -c main.s -o main.o -arch arm64 -mios-version-min=14.0
+
+    - name: Link object files
+      run: |
+        xcrun -sdk iphoneos clang main.o c_main.o 内存模块.o 查找进程.o -o main -arch arm64 -mios-version-min=14.0 -framework Foundation -framework CoreFoundation
+
+    - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
-        name: memory-server
-        path: memory_server
+        name: ios-arm64-binary
+        path: main
