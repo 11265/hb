@@ -8,15 +8,40 @@
 #define MY_PAGE_SIZE 4096
 
 // 这个函数需要在内核扩展中实现
+/*
 extern kern_return_t replace_pte(task_t src_task, vm_address_t src_addr, 
                                  task_t dst_task, vm_address_t dst_addr);
+*/
+kern_return_t replace_pte(task_t src_task, vm_address_t src_addr, 
+                          task_t dst_task, vm_address_t dst_addr) {
+    pmap_t src_pmap = get_task_pmap(src_task);
+    pmap_t dst_pmap = get_task_pmap(dst_task);
+
+    pt_entry_t *src_pte = pmap_pte(src_pmap, src_addr);
+    pt_entry_t *dst_pte = pmap_pte(dst_pmap, dst_addr);
+
+    if (!src_pte || !dst_pte) {
+        return KERN_FAILURE;
+    }
+
+    // 保存原始保护标志
+    pt_entry_t orig_prot = *src_pte & ARM_PTE_PROT_MASK;
+
+    // 替换PTE，保留原始保护标志
+    *src_pte = (*dst_pte & ~ARM_PTE_PROT_MASK) | orig_prot;
+
+    // 刷新TLB
+    flush_tlb_page(src_pmap, src_addr);
+
+    return KERN_SUCCESS;
+}
 
 static task_t target_task;
 
 int initialize_memory_module(pid_t target_pid) {
     kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &target_task);
     if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "Failed to get task for pid %d: %s\n", target_pid, mach_error_string(kr));
+        fprintf(stderr, "无法获取 pid 的任务 %d: %s\n", target_pid, mach_error_string(kr));
         return -1;
     }
     return 0;
@@ -29,7 +54,7 @@ void* read_memory(vm_address_t target_addr, size_t size) {
     // 在本地进程中分配内存
     kr = vm_allocate(mach_task_self(), &local_addr, size, VM_FLAGS_ANYWHERE);
     if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "Failed to allocate local memory: %s\n", mach_error_string(kr));
+        fprintf(stderr, "无法分配本地内存: %s\n", mach_error_string(kr));
         return NULL;
     }
 
@@ -49,27 +74,6 @@ void* read_memory(vm_address_t target_addr, size_t size) {
     return buffer;
 }
 
-int write_memory(vm_address_t target_addr, const void* data, size_t size) {
-    vm_address_t local_addr;
-    kern_return_t kr;
-
-    // 在本地进程中分配内存
-    kr = vm_allocate(mach_task_self(), &local_addr, size, VM_FLAGS_ANYWHERE);
-    if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "Failed to allocate local memory: %s\n", mach_error_string(kr));
-        return -1;
-    }
-
-    // 替换PTE的逻辑被省略或替换为其他逻辑
-    // 这里可以添加其他的逻辑来写入内存
-
-    // 直接写入，实际上是写入目标进程的内存
-    memcpy((void*)local_addr, data, size);
-
-    vm_deallocate(mach_task_self(), local_addr, size);
-    return 0;
-}
-
 
 // 使用示例
 int c_main(int argc, char *argv[]) {
@@ -84,18 +88,12 @@ int c_main(int argc, char *argv[]) {
     }
 
     // 读取示例
-    vm_address_t target_addr = 0x1000; // 示例地址
+    vm_address_t target_addr = 0x10000; // 示例地址
     size_t read_size = 100;
     void* data = read_memory(target_addr, read_size);
     if (data) {
-        printf("Read %zu bytes from address 0x%lx\n", read_size, target_addr);
+        printf("Read %zu 来自地址的字节数 0x%lx\n", read_size, target_addr);
         free(data);
-    }
-
-    // 写入示例
-    char write_data[] = "Hello, target process!";
-    if (write_memory(target_addr, write_data, strlen(write_data) + 1) == 0) {
-        printf("Wrote data to address 0x%lx\n", target_addr);
     }
 
     return 0;
