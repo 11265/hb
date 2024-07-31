@@ -26,7 +26,7 @@ jobs:
 
     - name: Compile main.mm
       run: |
-        xcrun -sdk iphoneos clang -c main.mm -o main.o -arch arm64 -mios-version-min=14.0
+        xcrun -sdk iphoneos clang++ -c main.mm -o main.o -arch arm64 -mios-version-min=14.0 -std=c++17
 
     - name: Assemble main.s
       run: |
@@ -34,7 +34,7 @@ jobs:
 
     - name: Link object files
       run: |
-        xcrun -sdk iphoneos clang main.o main_asm.o -o main -arch arm64 -mios-version-min=14.0 -framework Foundation -framework CoreFoundation
+        xcrun -sdk iphoneos clang++ main.o main_asm.o -o main -arch arm64 -mios-version-min=14.0 -framework Foundation -framework CoreFoundation -lc++ -std=c++17
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
