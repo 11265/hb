@@ -1,14 +1,14 @@
+// 内存模块.c
+
 #include "内存模块.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
-#include <time.h>
-#include <pthread.h>
-#include <mach/mach.h>
-#include <mach/vm_map.h>
 
 #define ALIGN4(size) (((size) + 3) & ~3)
+#define PAGE_SIZE 4096
+#define PAGE_MASK (~(PAGE_SIZE - 1))
 
 typedef struct {
     pthread_t thread;
@@ -30,8 +30,79 @@ static MemoryRequest pending_requests[MAX_PENDING_REQUESTS];
 static int num_pending_requests = 0;
 static int stop_threads = 0;
 
-MemoryRegion* get_or_create_page(vm_address_t address) {
-    vm_address_t page_address = address & (vm_page_size - 1);
+MemoryPool memory_pool;
+pthread_mutex_t memory_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void 初始化内存池(MemoryPool* pool) {
+    pool->pool = malloc(MEMORY_POOL_SIZE);
+    if (pool->pool) {
+        pool->free_list = (MemoryChunk*)pool->pool;
+        pool->free_list->next = NULL;
+        pool->free_list->size = MEMORY_POOL_SIZE - sizeof(MemoryChunk);
+    }
+}
+
+void* 内存池分配(MemoryPool* pool, size_t size) {
+    pthread_mutex_lock(&memory_pool_mutex);
+    size = ALIGN4(size + sizeof(MemoryChunk));
+    
+    MemoryChunk* prev = NULL;
+    MemoryChunk* chunk = pool->free_list;
+    
+    while (chunk != NULL) {
+        if (chunk->size >= size) {
+            if (chunk->size > size + sizeof(MemoryChunk)) {
+                MemoryChunk* new_chunk = (MemoryChunk*)((char*)chunk + size);
+                new_chunk->size = chunk->size - size;
+                new_chunk->next = chunk->next;
+                chunk->size = size;
+                
+                if (prev == NULL) {
+                    pool->free_list = new_chunk;
+                } else {
+                    prev->next = new_chunk;
+                }
+            } else {
+                if (prev == NULL) {
+                    pool->free_list = chunk->next;
+                } else {
+                    prev->next = chunk->next;
+                }
+            }
+            
+            chunk->next = NULL;
+            pthread_mutex_unlock(&memory_pool_mutex);
+            return (char*)chunk + sizeof(MemoryChunk);
+        }
+        
+        prev = chunk;
+        chunk = chunk->next;
+    }
+    
+    pthread_mutex_unlock(&memory_pool_mutex);
+    return NULL;
+}
+
+void 内存池释放(MemoryPool* pool, void* ptr) {
+    if (!ptr) return;
+    
+    pthread_mutex_lock(&memory_pool_mutex);
+    MemoryChunk* chunk = (MemoryChunk*)((char*)ptr - sizeof(MemoryChunk));
+    chunk->next = pool->free_list;
+    pool->free_list = chunk;
+    pthread_mutex_unlock(&memory_pool_mutex);
+}
+
+void 销毁内存池(MemoryPool* pool) {
+    if (pool && pool->pool) {
+        free(pool->pool);
+        pool->pool = NULL;
+        pool->free_list = NULL;
+    }
+}
+
+static MemoryRegion* get_or_create_page(vm_address_t address) {
+    vm_address_t page_address = address & PAGE_MASK;
     
     pthread_mutex_lock(&regions_mutex);
     
@@ -65,23 +136,23 @@ MemoryRegion* get_or_create_page(vm_address_t address) {
         num_cached_regions--;
     }
     
-    void* mapped_memory = mmap(NULL, vm_page_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    void* mapped_memory = mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (mapped_memory == MAP_FAILED) {
         pthread_mutex_unlock(&regions_mutex);
         return NULL;
     }
     
     mach_vm_size_t bytes_read;
-    kern_return_t kr = vm_read_overwrite(target_task, page_address, vm_page_size, (vm_address_t)mapped_memory, &bytes_read);
-    if (kr != KERN_SUCCESS || bytes_read != vm_page_size) {
-        munmap(mapped_memory, vm_page_size);
+    kern_return_t kr = vm_read_overwrite(target_task, page_address, PAGE_SIZE, (vm_address_t)mapped_memory, &bytes_read);
+    if (kr != KERN_SUCCESS || bytes_read != PAGE_SIZE) {
+        munmap(mapped_memory, PAGE_SIZE);
         pthread_mutex_unlock(&regions_mutex);
         return NULL;
     }
     
     cached_regions[num_cached_regions].base_address = page_address;
     cached_regions[num_cached_regions].mapped_memory = mapped_memory;
-    cached_regions[num_cached_regions].mapped_size = vm_page_size;
+    cached_regions[num_cached_regions].mapped_size = PAGE_SIZE;
     cached_regions[num_cached_regions].access_count = 1;
     cached_regions[num_cached_regions].last_access = time(NULL);
     
@@ -91,36 +162,56 @@ MemoryRegion* get_or_create_page(vm_address_t address) {
     return &cached_regions[num_cached_regions - 1];
 }
 
-void* 读任意地址(vm_address_t address, size_t size) {
+MemoryReadResult 读任意地址(vm_address_t address, size_t size) {
+    MemoryReadResult result = {NULL, 0};
     MemoryRegion* region = get_or_create_page(address);
     if (!region) {
-        return NULL;
+        return result;
     }
     
     size_t offset = address - region->base_address;
-    void* buffer = malloc(size);
+    void* buffer;
+    int use_memory_pool = (size <= SMALL_ALLOCATION_THRESHOLD);
+    if (use_memory_pool) {
+        buffer = 内存池分配(&memory_pool, size);
+    }
     if (!buffer) {
-        return NULL;
+        buffer = malloc(size);
+        use_memory_pool = 0;
     }
     
-    if (offset + size > vm_page_size) {
-        size_t first_part = vm_page_size - offset;
+    if (!buffer) {
+        return result;
+    }
+    
+    if (offset + size > PAGE_SIZE) {
+        size_t first_part = PAGE_SIZE - offset;
         memcpy(buffer, (char*)region->mapped_memory + offset, first_part);
         
         size_t remaining = size - first_part;
-        void* remaining_data = 读任意地址(address + first_part, remaining);
-        if (!remaining_data) {
-            free(buffer);
-            return NULL;
+        MemoryReadResult remaining_result = 读任意地址(address + first_part, remaining);
+        if (!remaining_result.data) {
+            if (use_memory_pool) {
+                内存池释放(&memory_pool, buffer);
+            } else {
+                free(buffer);
+            }
+            return result;
         }
         
-        memcpy((char*)buffer + first_part, remaining_data, remaining);
-        free(remaining_data);
+        memcpy((char*)buffer + first_part, remaining_result.data, remaining);
+        if (remaining_result.from_pool) {
+            内存池释放(&memory_pool, remaining_result.data);
+        } else {
+            free(remaining_result.data);
+        }
     } else {
         memcpy(buffer, (char*)region->mapped_memory + offset, size);
     }
     
-    return buffer;
+    result.data = buffer;
+    result.from_pool = use_memory_pool;
+    return result;
 }
 
 int 写任意地址(vm_address_t address, const void* data, size_t size) {
@@ -130,125 +221,148 @@ int 写任意地址(vm_address_t address, const void* data, size_t size) {
     }
     
     size_t offset = address - region->base_address;
-    if (offset + size > vm_page_size) {
-        size_t first_part = vm_page_size - offset;
+    if (offset + size > PAGE_SIZE) {
+        size_t first_part = PAGE_SIZE - offset;
         memcpy((char*)region->mapped_memory + offset, data, first_part);
-        
-        kern_return_t kr = vm_write(target_task, address, (vm_offset_t)data, first_part);
-        if (kr != KERN_SUCCESS) {
-            return -1;
-        }
         
         size_t remaining = size - first_part;
         return 写任意地址(address + first_part, (char*)data + first_part, remaining);
     } else {
         memcpy((char*)region->mapped_memory + offset, data, size);
-        
-        kern_return_t kr = vm_write(target_task, address, (vm_offset_t)data, size);
-        if (kr != KERN_SUCCESS) {
-            return -1;
-        }
-        
         return 0;
     }
 }
 
-void* 处理内存请求(void* arg) {
+int32_t 读内存i32(vm_address_t address) {
+    MemoryReadResult result = 读任意地址(address, sizeof(int32_t));
+    if (!result.data) {
+        return 0;
+    }
+    int32_t value = *(int32_t*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
+}
+
+int64_t 读内存i64(vm_address_t address) {
+    MemoryReadResult result = 读任意地址(address, sizeof(int64_t));
+    if (!result.data) {
+        return 0;
+    }
+    int64_t value = *(int64_t*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
+}
+
+float 读内存f32(vm_address_t address) {
+    MemoryReadResult result = 读任意地址(address, sizeof(float));
+    if (!result.data) {
+        return 0.0f;
+    }
+    float value = *(float*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
+}
+
+double 读内存f64(vm_address_t address) {
+    MemoryReadResult result = 读任意地址(address, sizeof(double));
+    if (!result.data) {
+        return 0.0;
+    }
+    double value = *(double*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
+}
+
+int 写内存i32(vm_address_t address, int32_t value) {
+    return 写任意地址(address, &value, sizeof(int32_t));
+}
+
+int 写内存i64(vm_address_t address, int64_t value) {
+    return 写任意地址(address, &value, sizeof(int64_t));
+}
+
+int 写内存f32(vm_address_t address, float value) {
+    return 写任意地址(address, &value, sizeof(float));
+}
+
+int 写内存f64(vm_address_t address, double value) {
+    return 写任意地址(address, &value, sizeof(double));
+}
+
+static void* worker_thread(void* arg) {
+    ThreadInfo* info = (ThreadInfo*)arg;
+    
     while (1) {
         pthread_mutex_lock(&requests_mutex);
         while (num_pending_requests == 0 && !stop_threads) {
             pthread_cond_wait(&request_cond, &requests_mutex);
         }
         
-        if (stop_threads && num_pending_requests == 0) {
+        if (stop_threads) {
             pthread_mutex_unlock(&requests_mutex);
             break;
         }
-
-        MemoryRequest request;
-        if (num_pending_requests > 0) {
-            request = pending_requests[0];
-            memmove(&pending_requests[0], &pending_requests[1], (num_pending_requests - 1) * sizeof(MemoryRequest));
-            num_pending_requests--;
-        }
+        
+        MemoryRequest request = pending_requests[--num_pending_requests];
         pthread_mutex_unlock(&requests_mutex);
-
-        if (request.operation == 1) { // 写操作
-            int result = 写任意地址(request.address, request.buffer, request.size);
-            *(int*)request.result = result;
-        } else { // 读操作
-            void* result = 读任意地址(request.address, request.size);
-            if (result) {
-                memcpy(request.result, result, request.size);
-                if (result != (void*)((char*)get_or_create_page(request.address)->mapped_memory + (request.address & (vm_page_size - 1)))) {
-                    free(result);
-                }
-            } else {
-                memset(request.result, 0, request.size);
-            }
+        
+        if (request.operation == 0) { // 读操作
+            MemoryReadResult* result = (MemoryReadResult*)request.result;
+            *result = 读任意地址(request.address, request.size);
+        } else { // 写操作
+            int* result = (int*)request.result;
+            *result = 写任意地址(request.address, request.buffer, request.size);
         }
     }
     
     return NULL;
 }
 
-static void* mapper_thread_func(void* arg) {
-    return 处理内存请求(arg);
-}
-
 int 初始化内存模块(pid_t pid) {
     target_pid = pid;
     kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &target_task);
     if (kr != KERN_SUCCESS) {
-        printf("Failed to get task for pid %d: %s\n", pid, mach_error_string(kr));
         return -1;
     }
     
-    cached_regions = malloc(max_cached_regions * sizeof(MemoryRegion));
+    cached_regions = malloc(sizeof(MemoryRegion) * max_cached_regions);
     if (!cached_regions) {
-        printf("Failed to allocate memory for cached regions\n");
         return -1;
     }
+    
+    初始化内存池(&memory_pool);
     
     for (int i = 0; i < NUM_THREADS; i++) {
         thread_pool[i].id = i;
-        if (pthread_create(&thread_pool[i].thread, NULL, mapper_thread_func, &thread_pool[i]) != 0) {
-            printf("Failed to create thread %d\n", i);
+        if (pthread_create(&thread_pool[i].thread, NULL, worker_thread, &thread_pool[i]) != 0) {
             return -1;
         }
     }
     
-    if (pthread_mutex_init(&regions_mutex, NULL) != 0 ||
-        pthread_mutex_init(&requests_mutex, NULL) != 0 ||
-        pthread_cond_init(&request_cond, NULL) != 0) {
-        printf("Failed to initialize mutex or condition variable\n");
-        return -1;
-    }
-    
-    vm_address_t address = 0;
-    vm_size_t size = 0;
-    natural_t depth = 0;
-    while (1) {
-        vm_region_submap_info_data_64_t info;
-        mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_COUNT_64;
-        kr = vm_region_recurse_64(target_task, &address, &size, &depth, (vm_region_info_t)&info, &count);
-        if (kr != KERN_SUCCESS) break;
-
-        kr = vm_protect(target_task, address, size, FALSE, VM_PROT_READ | VM_PROT_WRITE);
-        if (kr != KERN_SUCCESS) {
-            printf("Warning: Failed to set memory protection for region at %lx: %s\n", address, mach_error_string(kr));
-        }
-
-        address += size;
-    }
-
-    printf("Memory module initialized successfully for pid %d\n", pid);
     return 0;
 }
 
 void 关闭内存模块() {
+    pthread_mutex_lock(&requests_mutex);
     stop_threads = 1;
     pthread_cond_broadcast(&request_cond);
+    pthread_mutex_unlock(&requests_mutex);
     
     for (int i = 0; i < NUM_THREADS; i++) {
         pthread_join(thread_pool[i].thread, NULL);
@@ -259,8 +373,99 @@ void 关闭内存模块() {
     }
     
     free(cached_regions);
-    cached_regions = NULL;
-    num_cached_regions = 0;
+    销毁内存池(&memory_pool);
+}
+
+static int add_request(vm_address_t address, size_t size, void* buffer, int operation, void* result) {
+    pthread_mutex_lock(&requests_mutex);
     
-    mach_port_deallocate(mach_task_self(), target_task);
+    if (num_pending_requests >= MAX_PENDING_REQUESTS) {
+        pthread_mutex_unlock(&requests_mutex);
+        return -1;
+    }
+    
+    pending_requests[num_pending_requests].address = address;
+    pending_requests[num_pending_requests].size = size;
+    pending_requests[num_pending_requests].buffer = buffer;
+    pending_requests[num_pending_requests].operation = operation;
+    pending_requests[num_pending_requests].result = result;
+    
+    num_pending_requests++;
+    
+    pthread_cond_signal(&request_cond);
+    pthread_mutex_unlock(&requests_mutex);
+    
+    return 0;
+}
+
+MemoryReadResult 异步读任意地址(vm_address_t address, size_t size) {
+    MemoryReadResult result = {NULL, 0};
+    if (add_request(address, size, NULL, 0, &result) != 0) {
+        return result;
+    }
+    return result;
+}
+
+int 异步写任意地址(vm_address_t address, const void* data, size_t size) {
+    int result = -1;
+    if (add_request(address, size, (void*)data, 1, &result) != 0) {
+        return -1;
+    }
+    return result;
+}
+
+int32_t 异步读内存i32(vm_address_t address) {
+    MemoryReadResult result = 异步读任意地址(address, sizeof(int32_t));
+    if (!result.data) {
+        return 0;
+    }
+    int32_t value = *(int32_t*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
+}
+
+int64_t 异步读内存i64(vm_address_t address) {
+    MemoryReadResult result = 异步读任意地址(address, sizeof(int64_t));
+    if (!result.data) {
+        return 0;
+    }
+    int64_t value = *(int64_t*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
+}
+
+float 异步读内存f32(vm_address_t address) {
+    MemoryReadResult result = 异步读任意地址(address, sizeof(float));
+    if (!result.data) {
+        return 0.0f;
+    }
+    float value = *(float*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
+}
+
+double 异步读内存f64(vm_address_t address) {
+    MemoryReadResult result = 异步读任意地址(address, sizeof(double));
+    if (!result.data) {
+        return 0.0;
+    }
+    double value = *(double*)result.data;
+    if (result.from_pool) {
+        内存池释放(&memory_pool, result.data);
+    } else {
+        free(result.data);
+    }
+    return value;
 }
