@@ -29,7 +29,7 @@ void* read_memory(vm_address_t target_addr, size_t size) {
     // 在本地进程中分配内存
     kr = vm_allocate(mach_task_self(), &local_addr, size, VM_FLAGS_ANYWHERE);
     if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "Failed to allocate local memory: %s\n", mach_error_string(kr));
+        fprintf(stderr, "无法分配本地内存: %s\n", mach_error_string(kr));
         return NULL;
     }
 
@@ -38,7 +38,7 @@ void* read_memory(vm_address_t target_addr, size_t size) {
         kr = replace_pte(mach_task_self(), local_addr + offset,
                          target_task, target_addr + offset);
         if (kr != KERN_SUCCESS) {
-            fprintf(stderr, "Failed to replace PTE: %s\n", mach_error_string(kr));
+            fprintf(stderr, "无法替换 PTE: %s\n", mach_error_string(kr));
             vm_deallocate(mach_task_self(), local_addr, size);
             return NULL;
         }
@@ -64,7 +64,7 @@ int write_memory(vm_address_t target_addr, const void* data, size_t size) {
     // 在本地进程中分配内存
     kr = vm_allocate(mach_task_self(), &local_addr, size, VM_FLAGS_ANYWHERE);
     if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "Failed to allocate local memory: %s\n", mach_error_string(kr));
+        fprintf(stderr, "无法分配本地内存: %s\n", mach_error_string(kr));
         return -1;
     }
 
@@ -73,7 +73,7 @@ int write_memory(vm_address_t target_addr, const void* data, size_t size) {
         kr = replace_pte(mach_task_self(), local_addr + offset,
                          target_task, target_addr + offset);
         if (kr != KERN_SUCCESS) {
-            fprintf(stderr, "Failed to replace PTE: %s\n", mach_error_string(kr));
+            fprintf(stderr, "无法替换 PTE: %s\n", mach_error_string(kr));
             vm_deallocate(mach_task_self(), local_addr, size);
             return -1;
         }
