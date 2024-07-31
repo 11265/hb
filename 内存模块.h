@@ -31,16 +31,6 @@ void 关闭内存模块();
 void* 读任意地址(vm_address_t address, size_t size);
 int   写任意地址(vm_address_t address, const void* data, size_t size);
 
-int32_t 读内存i32(vm_address_t address);
-int64_t 读内存i64(vm_address_t address);
-float   读内存f32(vm_address_t address);
-double  读内存f64(vm_address_t address);
-
-int 写内存i32(vm_address_t address, int32_t value);
-int 写内存i64(vm_address_t address, int64_t value);
-int 写内存f32(vm_address_t address, float value);
-int 写内存f64(vm_address_t address, double value);
-
 MemoryRegion* get_or_create_page(vm_address_t address);
 void* 处理内存请求(void* arg);
 
