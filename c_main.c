@@ -101,7 +101,7 @@ int main(int argc, char *argv[]) {
     enumerate_memory_regions(pid);
 
     // 从特定地址读取内存的示例
-    vm_address_t test_address = 0x1000; // 替换为您想要读取的实际地址
+    vm_address_t test_address = 0x1060E1388; // 替换为您想要读取的实际地址
     char buffer[100];
     
     kern_return_t kr = read_process_memory(pid, test_address, buffer, sizeof(buffer));
