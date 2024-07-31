@@ -1,5 +1,3 @@
-// c_main.c
-
 #include "内存模块.h"
 #include "查找进程.h"
 #include <stdio.h>
@@ -26,9 +24,8 @@ int c_main(void) {
 
     uintptr_t test_address = 0x1060E1388; // 示例地址，请根据实际情况修改
     size_t map_size = 4096; // 映射大小，可以根据需要调整
-    int update_interval_ms = 0; // 设置为0，我们会手动更新
 
-    MappedMemory* mapped_memory = 创建内存映射(test_address, map_size, update_interval_ms);
+    MappedMemory* mapped_memory = 创建内存映射(test_address, map_size);
     if (!mapped_memory) {
         printf("创建内存映射失败\n");
         关闭内存模块();
@@ -39,23 +36,17 @@ int c_main(void) {
 
     while (1) {
         for (int i = 0; i < READS_PER_SECOND; i++) {
-            // 手动更新内存映射
-            if (更新内存映射(mapped_memory) != 0) {
-                printf("更新内存映射失败\n");
-                continue;
-            }
-
             printf("读取次数: %d\n", i + 1);
             printf("读取 int32: %d\n", 读内存i32(mapped_memory, 0));
             // 如果需要读取其他类型，可以取消下面的注释
             // printf("读取 int64: %lld\n", 读内存i64(mapped_memory, 0));
             // printf("读取 float: %f\n", 读内存f32(mapped_memory, 0));
             // printf("读取 double: %f\n", 读内存f64(mapped_memory, 0));
-            printf("\n");
 
             usleep(MICROSECONDS_PER_SECOND / READS_PER_SECOND);
         }
     }
+
 
     // 注意：以下代码在无限循环中永远不会执行
     // 您需要通过 Ctrl+C 来终止程序
