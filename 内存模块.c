@@ -214,25 +214,6 @@ MemoryReadResult 读任意地址(vm_address_t address, size_t size) {
     return result;
 }
 
-int 写任意地址(vm_address_t address, const void* data, size_t size) {
-    MemoryRegion* region = get_or_create_page(address);
-    if (!region) {
-        return -1;
-    }
-    
-    size_t offset = address - region->base_address;
-    if (offset + size > PAGE_SIZE) {
-        size_t first_part = PAGE_SIZE - offset;
-        memcpy((char*)region->mapped_memory + offset, data, first_part);
-        
-        size_t remaining = size - first_part;
-        return 写任意地址(address + first_part, (char*)data + first_part, remaining);
-    } else {
-        memcpy((char*)region->mapped_memory + offset, data, size);
-        return 0;
-    }
-}
-
 int32_t 读内存i32(vm_address_t address) {
     MemoryReadResult result = 读任意地址(address, sizeof(int32_t));
     if (!result.data) {
@@ -289,21 +270,6 @@ double 读内存f64(vm_address_t address) {
     return value;
 }
 
-int 写内存i32(vm_address_t address, int32_t value) {
-    return 写任意地址(address, &value, sizeof(int32_t));
-}
-
-int 写内存i64(vm_address_t address, int64_t value) {
-    return 写任意地址(address, &value, sizeof(int64_t));
-}
-
-int 写内存f32(vm_address_t address, float value) {
-    return 写任意地址(address, &value, sizeof(float));
-}
-
-int 写内存f64(vm_address_t address, double value) {
-    return 写任意地址(address, &value, sizeof(double));
-}
 
 static void* worker_thread(void* arg) {
     ThreadInfo* info = (ThreadInfo*)arg;
@@ -325,9 +291,6 @@ static void* worker_thread(void* arg) {
         if (request.operation == 0) { // 读操作
             MemoryReadResult* result = (MemoryReadResult*)request.result;
             *result = 读任意地址(request.address, request.size);
-        } else { // 写操作
-            int* result = (int*)request.result;
-            *result = 写任意地址(request.address, request.buffer, request.size);
         }
     }
     
@@ -350,9 +313,7 @@ int 初始化内存模块(pid_t pid) {
     
     for (int i = 0; i < NUM_THREADS; i++) {
         thread_pool[i].id = i;
-        if (pthread_create(&thread_pool[i].thread, NULL, worker_thread, &thread_pool[i]) != 0) {
-            return -1;
-        }
+        pthread_create(&thread_pool[i].thread, NULL, worker_thread, &thread_pool[i]);
     }
     
     return 0;
@@ -374,5 +335,6 @@ void 关闭内存模块() {
     
     free(cached_regions);
     销毁内存池(&memory_pool);
+    
+    mach_port_deallocate(mach_task_self(), target_task);
 }
-
