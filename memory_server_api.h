@@ -43,12 +43,6 @@ void enumerate_regions_to_buffer(pid_t pid, char *buffer, size_t buffer_size);
 // 枚举进程
 ProcessInfo *enumprocess_native(size_t *count);
 
-// 暂停进程
-int suspend_process(pid_t pid);
-
-// 恢复进程
-int resume_process(pid_t pid);
-
 // 枚举模块
 ModuleInfo *enummodule_native(pid_t pid, size_t *count);
 
