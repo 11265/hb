@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>  // 为了使用 usleep 函数
+#include <unistd.h>
 
 #define READS_PER_SECOND 10
 #define MICROSECONDS_PER_SECOND 1000000
@@ -24,26 +24,42 @@ int c_main(void) {
     }
     printf("内存模块初始化成功\n");
 
-    vm_address_t test_address = 0x1060E1388; // 示例地址，请根据实际情况修改
+    uintptr_t test_address = 0x1060E1388; // 示例地址，请根据实际情况修改
+    size_t map_size = 4096; // 映射大小，可以根据需要调整
+    int update_interval_ms = 0; // 设置为0，我们会手动更新
+
+    MappedMemory* mapped_memory = 创建内存映射(test_address, map_size, update_interval_ms);
+    if (!mapped_memory) {
+        printf("创建内存映射失败\n");
+        关闭内存模块();
+        return 1;
+    }
 
     printf("开始循环读取内存，按 Ctrl+C 退出\n");
 
     while (1) {
         for (int i = 0; i < READS_PER_SECOND; i++) {
+            // 手动更新内存映射
+            if (更新内存映射(mapped_memory) != 0) {
+                printf("更新内存映射失败\n");
+                continue;
+            }
+
             printf("读取次数: %d\n", i + 1);
-            printf("读取 int32: %d\n", 读内存i32(test_address));
-            //printf("读取 int64: %lld\n", 读内存i64(test_address));
-            //printf("读取 float: %f\n", 读内存f32(test_address));
-            //printf("读取 double: %f\n", 读内存f64(test_address));
+            printf("读取 int32: %d\n", 读内存i32(mapped_memory, 0));
+            // 如果需要读取其他类型，可以取消下面的注释
+            // printf("读取 int64: %lld\n", 读内存i64(mapped_memory, 0));
+            // printf("读取 float: %f\n", 读内存f32(mapped_memory, 0));
+            // printf("读取 double: %f\n", 读内存f64(mapped_memory, 0));
             printf("\n");
 
-            // 休眠一段时间，以达到每秒10次的频率
             usleep(MICROSECONDS_PER_SECOND / READS_PER_SECOND);
         }
     }
 
     // 注意：以下代码在无限循环中永远不会执行
     // 您需要通过 Ctrl+C 来终止程序
+    释放内存映射(mapped_memory);
     关闭内存模块();
     printf("关闭内存模块\n");
     return 0;
