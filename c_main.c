@@ -1,21 +1,22 @@
 #include <mach/mach.h>
-#include <mach/mach_vm.h>
+#include <mach/vm_map.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 // 定义调试日志宏，用于输出带有 [MEMORYSERVER] 前缀的日志信息
 #define DEBUG_LOG(format, ...) printf("[MEMORYSERVER] " format, ##__VA_ARGS__)
 
 // 定义内存区域结构体，用于存储内存区域的地址、大小和保护属性
 typedef struct {
-    mach_vm_address_t address;  // 内存区域的起始地址
-    mach_vm_size_t size;        // 内存区域的大小
-    vm_prot_t protection;       // 内存区域的保护属性
+    vm_address_t address;  // 内存区域的起始地址
+    vm_size_t size;        // 内存区域的大小
+    vm_prot_t protection;  // 内存区域的保护属性
 } MemoryRegion;
 
 // 从指定进程的内存中读取数据
-kern_return_t read_process_memory(pid_t pid, mach_vm_address_t address, void *buffer, mach_vm_size_t size) {
+kern_return_t read_process_memory(pid_t pid, vm_address_t address, void *buffer, vm_size_t size) {
     task_t task;
     kern_return_t kr;
 
@@ -31,11 +32,11 @@ kern_return_t read_process_memory(pid_t pid, mach_vm_address_t address, void *bu
         }
     }
 
-    // 使用 mach_vm_read_overwrite 读取内存
-    mach_vm_size_t out_size;
-    kr = mach_vm_read_overwrite(task, address, size, (mach_vm_address_t)buffer, &out_size);
+    // 使用 vm_read_overwrite 读取内存
+    vm_size_t out_size;
+    kr = vm_read_overwrite(task, address, size, (vm_address_t)buffer, &out_size);
     if (kr != KERN_SUCCESS) {
-        DEBUG_LOG("错误：mach_vm_read_overwrite 失败，错误码 %d (%s)\n", kr, mach_error_string(kr));
+        DEBUG_LOG("错误：vm_read_overwrite 失败，错误码 %d (%s)\n", kr, mach_error_string(kr));
         return kr;
     }
 
@@ -53,8 +54,8 @@ void enumerate_memory_regions(pid_t pid) {
         return;
     }
 
-    mach_vm_address_t address = 0;
-    mach_vm_size_t size;
+    vm_address_t address = 0;
+    vm_size_t size;
     vm_region_basic_info_data_64_t info;
     mach_msg_type_number_t info_count;
     mach_port_t object_name;
@@ -62,8 +63,8 @@ void enumerate_memory_regions(pid_t pid) {
     // 循环遍历所有内存区域
     while (1) {
         info_count = VM_REGION_BASIC_INFO_COUNT_64;
-        kr = mach_vm_region(task, &address, &size, VM_REGION_BASIC_INFO_64,
-                            (vm_region_info_t)&info, &info_count, &object_name);
+        kr = vm_region_64(task, &address, &size, VM_REGION_BASIC_INFO_64,
+                          (vm_region_info_t)&info, &info_count, &object_name);
 
         if (kr != KERN_SUCCESS) {
             break;  // 遍历结束或发生错误
@@ -100,7 +101,7 @@ int main(int argc, char *argv[]) {
     enumerate_memory_regions(pid);
 
     // 从特定地址读取内存的示例
-    mach_vm_address_t test_address = 0x1000; // 替换为您想要读取的实际地址
+    vm_address_t test_address = 0x1000; // 替换为您想要读取的实际地址
     char buffer[100];
     
     kern_return_t kr = read_process_memory(pid, test_address, buffer, sizeof(buffer));
