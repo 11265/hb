@@ -13,6 +13,8 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <limits.h>
+#include <mach/mach.h>
+#include <mach/vm_map.h>
 
 // 进程区域文件名获取函数类型定义
 typedef int (*PROC_REGIONFILENAME)(int pid, uint64_t address, void *buffer, uint32_t buffersize);
@@ -50,9 +52,9 @@ ssize_t read_memory_native(int pid, mach_vm_address_t address, mach_vm_size_t si
     }
 
     mach_vm_size_t out_size;
-    kr = mach_vm_read_overwrite(task, address, size, (mach_vm_address_t)buffer, &out_size);
+    kr = vm_read_overwrite(task, address, size, (mach_vm_address_t)buffer, &out_size);
     if (kr != KERN_SUCCESS) {
-        debug_log("错误:mach_vm_read_overwrite失败,错误码 %d (%s)\n", kr,
+        debug_log("错误:vm_read_overwrite失败,错误码 %d (%s)\n", kr,
                   mach_error_string(kr));
         return -1;
     }
@@ -88,10 +90,10 @@ ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_vm_size_t s
     mach_vm_address_t region_address = address;
     mach_vm_size_t region_size = size;
     // 获取当前内存保护
-    err = mach_vm_region(task, &region_address, &region_size, VM_REGION_BASIC_INFO_64,
+    err = vm_region(task, &region_address, &region_size, VM_REGION_BASIC_INFO_64,
                          (vm_region_info_t)&info, &info_count, &object_name);
     if (err != KERN_SUCCESS) {
-        debug_log("错误:mach_vm_region失败,错误码 %d (%s),地址 0x%llx,大小 0x%llx\n",
+        debug_log("错误:vm_region失败,错误码 %d (%s),地址 0x%llx,大小 0x%llx\n",
                   err, mach_error_string(err), address, size);
         if (!is_embedded_mode) {
             task_resume(task);
@@ -101,9 +103,9 @@ ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_vm_size_t s
     original_protection = info.protection;
 
     // 更改内存保护以允许写入
-    err = mach_vm_protect(task, address, size, 0, VM_PROT_READ | VM_PROT_WRITE);
+    err = vm_protect(task, address, size, 0, VM_PROT_READ | VM_PROT_WRITE);
     if (err != KERN_SUCCESS) {
-        debug_log("错误:mach_vm_protect(写入使能)失败,错误码 %d (%s)\n", err, mach_error_string(err));
+        debug_log("错误:vm_protect(写入使能)失败,错误码 %d (%s)\n", err, mach_error_string(err));
         if (!is_embedded_mode) {
             task_resume(task);
         }
@@ -111,11 +113,11 @@ ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_vm_size_t s
     }
 
     // 写入内存
-    err = mach_vm_write(task, address, (vm_offset_t)buffer, size);
+    err = vm_write(task, address, (vm_offset_t)buffer, size);
     if (err != KERN_SUCCESS) {
-        debug_log("错误:mach_vm_write失败,错误码 %d (%s),地址 0x%llx,大小 0x%llx\n",
+        debug_log("错误:vm_write失败,错误码 %d (%s),地址 0x%llx,大小 0x%llx\n",
                   err, mach_error_string(err), address, size);
-        mach_vm_protect(task, address, size, 0, original_protection);  // 尝试恢复保护
+        vm_protect(task, address, size, 0, original_protection);  // 尝试恢复保护
         if (!is_embedded_mode) {
             task_resume(task);
         }
@@ -123,9 +125,9 @@ ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_vm_size_t s
     }
 
     // 重置内存保护
-    err = mach_vm_protect(task, address, size, 0, original_protection);
+    err = vm_protect(task, address, size, 0, original_protection);
     if (err != KERN_SUCCESS) {
-        debug_log("警告:mach_vm_protect(恢复保护)失败,错误码 %d (%s)\n", err, mach_error_string(err));
+        debug_log("警告:vm_protect(恢复保护)失败,错误码 %d (%s)\n", err, mach_error_string(err));
         if (!is_embedded_mode) {
             task_resume(task);
         }
@@ -162,8 +164,9 @@ void enumerate_regions_to_buffer(pid_t pid, char *buffer, size_t buffer_size) {
         vm_region_submap_info_data_64_t info;
         mach_msg_type_number_t info_count = VM_REGION_SUBMAP_INFO_COUNT_64;
 
-        if (vm_region_recurse_64(task, &address, &size, &depth, (vm_region_info_t)&info,
-                                 &info_count) != KERN_SUCCESS) {
+        //if (vm_region_recurse_64(task, &address, &size, &depth, (vm_region_info_t)&info,&info_count) != KERN_SUCCESS) 
+        if (vm_region_recurse_64(task, (vm_address_t*)&address, (vm_size_t*)&size, &depth, (vm_region_info_t)&info, ...))
+        {
             break;
         }
 
@@ -356,17 +359,17 @@ ModuleInfo *enummodule_native(pid_t pid, size_t *count) {
     struct dyld_all_image_infos all_image_infos_data;
     
     mach_vm_size_t read_size;
-    kr = mach_vm_read_overwrite(task, (mach_vm_address_t)all_image_infos, sizeof(struct dyld_all_image_infos), 
+    kr = vm_read_overwrite(task, (mach_vm_address_t)all_image_infos, sizeof(struct dyld_all_image_infos), 
                                 (mach_vm_address_t)&all_image_infos_data, &read_size);
     if (kr != KERN_SUCCESS) {
-        debug_log("错误:mach_vm_read_overwrite失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
+        debug_log("错误:vm_read_overwrite失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
         return NULL;
     }
 
     uint32_t image_count = all_image_infos_data.infoArrayCount;
     struct dyld_image_info *image_infos = malloc(sizeof(struct dyld_image_info) * image_count);
     
-    kr = mach_vm_read_overwrite(task, (mach_vm_address_t)all_image_infos_data.infoArray, 
+    kr = vm_read_overwrite(task, (mach_vm_address_t)all_image_infos_data.infoArray, 
                                 sizeof(struct dyld_image_info) * image_count, 
                                 (mach_vm_address_t)image_infos, &read_size);
     if (kr != KERN_SUCCESS) {
@@ -380,7 +383,7 @@ ModuleInfo *enummodule_native(pid_t pid, size_t *count) {
 
     for (uint32_t i = 0; i < image_count; i++) {
         char path[PATH_MAX];
-        kr = mach_vm_read_overwrite(task, (mach_vm_address_t)image_infos[i].imageFilePath, 
+        kr = vm_read_overwrite(task, (mach_vm_address_t)image_infos[i].imageFilePath, 
                                     PATH_MAX, (mach_vm_address_t)path, &read_size);
         if (kr != KERN_SUCCESS) {
             debug_log("错误:读取模块路径失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
@@ -392,7 +395,7 @@ ModuleInfo *enummodule_native(pid_t pid, size_t *count) {
 
         // 读取Mach-O头以确定是否为64位
         struct mach_header header;
-        kr = mach_vm_read_overwrite(task, (mach_vm_address_t)image_infos[i].imageLoadAddress, 
+        kr = vm_read_overwrite(task, (mach_vm_address_t)image_infos[i].imageLoadAddress, 
                                     sizeof(struct mach_header), (mach_vm_address_t)&header, &read_size);
         if (kr != KERN_SUCCESS) {
             debug_log("错误:读取Mach-O头失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
@@ -407,7 +410,7 @@ ModuleInfo *enummodule_native(pid_t pid, size_t *count) {
         size_t header_size = modules[i].is_64bit ? sizeof(struct mach_header_64) : sizeof(struct mach_header);
         void *full_header = malloc(header_size + header.sizeofcmds);
         
-        kr = mach_vm_read_overwrite(task, (mach_vm_address_t)image_infos[i].imageLoadAddress, 
+        kr = vm_read_overwrite(task, (mach_vm_address_t)image_infos[i].imageLoadAddress, 
                                     header_size + header.sizeofcmds, (mach_vm_address_t)full_header, &read_size);
         if (kr != KERN_SUCCESS) {
             debug_log("错误:读取完整Mach-O头失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
