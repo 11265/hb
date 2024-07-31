@@ -58,12 +58,12 @@ int debug_log(const char *format, ...)
     NSLogv(taggedFormatString, list);
     va_end(list);
     return 0;
-}
+}// 调试日志函数
 
 extern "C" pid_t get_pid_native()
 {
     return getpid();
-}
+}// 获取当前进程ID的函数
 
 extern "C" ssize_t read_memory_native(int pid, mach_vm_address_t address, mach_vm_size_t size,
                                       unsigned char *buffer)
@@ -94,7 +94,7 @@ extern "C" ssize_t read_memory_native(int pid, mach_vm_address_t address, mach_v
     }
 
     return static_cast<ssize_t>(out_size);
-}
+}// 从指定进程内存读取数据的函数
 
 extern "C" ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_vm_size_t size,
                                        unsigned char *buffer)
@@ -129,7 +129,7 @@ extern "C" ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_
 
     mach_vm_address_t region_address = address;
     mach_vm_size_t region_size = size;
-    // Get the current protection
+    // 获取当前内存保护
     err = mach_vm_region(task, &region_address, &region_size, VM_REGION_BASIC_INFO_64,
                          (vm_region_info_t)&info, &info_count, &object_name);
     if (err != KERN_SUCCESS)
@@ -145,7 +145,7 @@ extern "C" ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_
     }
     original_protection = info.protection;
 
-    // Change the memory protection to allow writing
+    // 修改内存保护以允许写入
     err = mach_vm_protect(task, address, size, false, VM_PROT_READ | VM_PROT_WRITE);
     if (err != KERN_SUCCESS)
     {
@@ -158,7 +158,7 @@ extern "C" ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_
         return -1;
     }
 
-    // Write to memory
+    // 写入内存
     err = mach_vm_write(task, address, (vm_offset_t)buffer, size);
     if (err != KERN_SUCCESS)
     {
@@ -174,7 +174,7 @@ extern "C" ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_
         return -1;
     }
 
-    // Reset the memory protection
+    // 重置内存保护
     err = mach_vm_protect(task, address, size, false, original_protection);
     if (err != KERN_SUCCESS)
     {
@@ -193,7 +193,7 @@ extern "C" ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_
         task_resume(task);
     }
     return static_cast<ssize_t>(size);
-}
+}// 向指定进程内存写入数据的函数
 
 extern "C" void enumerate_regions_to_buffer(pid_t pid, char *buffer, size_t buffer_size)
 {
@@ -251,7 +251,7 @@ extern "C" void enumerate_regions_to_buffer(pid_t pid, char *buffer, size_t buff
             address += size;
         }
     }
-}
+}// 枚举指定进程的内存区域并将其写入缓冲区的函数
 
 extern "C" ProcessInfo *enumprocess_native(size_t *count)
 {
@@ -327,7 +327,7 @@ extern "C" ProcessInfo *enumprocess_native(size_t *count)
         debug_log("Error: Failed to enumerate processes, error %d\n", err);
         return nullptr;
     }
-}
+}// 枚举所有进程并返回进程信息的函数
 
 extern "C" bool suspend_process(pid_t pid)
 {
@@ -353,7 +353,7 @@ extern "C" bool suspend_process(pid_t pid)
     }
 
     return true;
-}
+}// 挂起指定进程的函数
 
 extern "C" bool resume_process(pid_t pid)
 {
@@ -379,7 +379,7 @@ extern "C" bool resume_process(pid_t pid)
     }
 
     return true;
-}
+}// 恢复指定进程的函数
 
 static std::uint64_t get_image_size_64(int pid, mach_vm_address_t base_address)
 {
@@ -420,7 +420,7 @@ static std::uint64_t get_image_size_64(int pid, mach_vm_address_t base_address)
     }
 
     return image_size;
-}
+}// 获取64位Mach-O镜像大小的函数
 
 static std::uint64_t get_image_size_32(int pid, mach_vm_address_t base_address)
 {
@@ -461,7 +461,7 @@ static std::uint64_t get_image_size_32(int pid, mach_vm_address_t base_address)
     }
 
     return image_size;
-}
+}// 获取32位Mach-O镜像大小的函数
 
 static std::uint64_t get_module_size(int pid, mach_vm_address_t address, bool *is_64bit)
 {
