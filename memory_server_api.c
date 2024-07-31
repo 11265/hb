@@ -13,8 +13,6 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <limits.h>
-#include <mach/mach.h>
-#include <mach/vm_map.h>
 
 // 进程区域文件名获取函数类型定义
 typedef int (*PROC_REGIONFILENAME)(int pid, uint64_t address, void *buffer, uint32_t buffersize);
@@ -51,8 +49,8 @@ ssize_t read_memory_native(int pid, mach_vm_address_t address, mach_vm_size_t si
         }
     }
 
-    mach_vm_size_t out_size;
-    kr = vm_read_overwrite(task, address, size, (mach_vm_address_t)buffer, &out_size);
+    vm_size_t out_size = 0;
+    kr = vm_read_overwrite(task, (vm_address_t)address, (vm_size_t)size, (vm_address_t)buffer, &out_size);
     if (kr != KERN_SUCCESS) {
         debug_log("错误:vm_read_overwrite失败,错误码 %d (%s)\n", kr,
                   mach_error_string(kr));
@@ -87,14 +85,14 @@ ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_vm_size_t s
         task_suspend(task);
     }
 
-    mach_vm_address_t region_address = address;
-    mach_vm_size_t region_size = size;
+    vm_address_t region_address = (vm_address_t)address;
+    vm_size_t region_size = (vm_size_t)size;
     // 获取当前内存保护
-    err = vm_region(task, &region_address, &region_size, VM_REGION_BASIC_INFO_64,
-                         (vm_region_info_t)&info, &info_count, &object_name);
+    err = vm_region_64(task, &region_address, &region_size, VM_REGION_BASIC_INFO_64,
+                       (vm_region_info_t)&info, &info_count, &object_name);
     if (err != KERN_SUCCESS) {
         debug_log("错误:vm_region失败,错误码 %d (%s),地址 0x%llx,大小 0x%llx\n",
-                  err, mach_error_string(err), address, size);
+                  err, mach_error_string(err), (unsigned long long)address, (unsigned long long)size);
         if (!is_embedded_mode) {
             task_resume(task);
         }
@@ -103,7 +101,7 @@ ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_vm_size_t s
     original_protection = info.protection;
 
     // 更改内存保护以允许写入
-    err = vm_protect(task, address, size, 0, VM_PROT_READ | VM_PROT_WRITE);
+    err = vm_protect(task, (vm_address_t)address, (vm_size_t)size, 0, VM_PROT_READ | VM_PROT_WRITE);
     if (err != KERN_SUCCESS) {
         debug_log("错误:vm_protect(写入使能)失败,错误码 %d (%s)\n", err, mach_error_string(err));
         if (!is_embedded_mode) {
@@ -113,11 +111,11 @@ ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_vm_size_t s
     }
 
     // 写入内存
-    err = vm_write(task, address, (vm_offset_t)buffer, size);
+    err = vm_write(task, (vm_address_t)address, (vm_offset_t)buffer, (mach_msg_type_number_t)size);
     if (err != KERN_SUCCESS) {
         debug_log("错误:vm_write失败,错误码 %d (%s),地址 0x%llx,大小 0x%llx\n",
-                  err, mach_error_string(err), address, size);
-        vm_protect(task, address, size, 0, original_protection);  // 尝试恢复保护
+                  err, mach_error_string(err), (unsigned long long)address, (unsigned long long)size);
+        vm_protect(task, (vm_address_t)address, (vm_size_t)size, 0, original_protection);  // 尝试恢复保护
         if (!is_embedded_mode) {
             task_resume(task);
         }
@@ -125,7 +123,7 @@ ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_vm_size_t s
     }
 
     // 重置内存保护
-    err = vm_protect(task, address, size, 0, original_protection);
+    err = vm_protect(task, (vm_address_t)address, (vm_size_t)size, 0, original_protection);
     if (err != KERN_SUCCESS) {
         debug_log("警告:vm_protect(恢复保护)失败,错误码 %d (%s)\n", err, mach_error_string(err));
         if (!is_embedded_mode) {
@@ -146,7 +144,7 @@ void enumerate_regions_to_buffer(pid_t pid, char *buffer, size_t buffer_size) {
     kern_return_t err;
     mach_vm_address_t address = 0;
     mach_vm_size_t size = 0;
-    natural_t depth = 1;
+    natural_t depth = 0;
 
     if (pid == getpid()) {
         task = mach_task_self();
@@ -164,9 +162,7 @@ void enumerate_regions_to_buffer(pid_t pid, char *buffer, size_t buffer_size) {
         vm_region_submap_info_data_64_t info;
         mach_msg_type_number_t info_count = VM_REGION_SUBMAP_INFO_COUNT_64;
 
-        //if (vm_region_recurse_64(task, &address, &size, &depth, (vm_region_info_t)&info,&info_count) != KERN_SUCCESS) 
-        if (vm_region_recurse_64(task, (vm_address_t*)&address, (vm_size_t*)&size, &depth, (vm_region_info_t)&info, ...))
-        {
+        if (vm_region_recurse_64(task, (vm_address_t*)&address, (vm_size_t*)&size, &depth, (vm_region_info_t)&info, &info_count) != KERN_SUCCESS) {
             break;
         }
 
@@ -190,238 +186,266 @@ void enumerate_regions_to_buffer(pid_t pid, char *buffer, size_t buffer_size) {
 }
 
 // 枚举进程
-ProcessInfo *enumprocess_native(size_t *count) {
-    int err;
-    struct kinfo_proc *result;
-    int done;
-    static const int name[] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0};
-    size_t length;
+ProcessInfo* enumprocess_native(size_t* count) {
+    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0};
+    size_t size;
+    struct kinfo_proc *procs;
+    ProcessInfo *result = NULL;
+    size_t i, nprocs;
 
-    result = NULL;
-    done = 0;
-
-    do {
-        length = 0;
-        err = sysctl((int *)name, (sizeof(name) / sizeof(*name)) - 1, NULL, &length, NULL, 0);
-        if (err == -1) {
-            err = errno;
-        }
-
-        if (err == 0) {
-            result = (struct kinfo_proc *)malloc(length);
-            if (result == NULL) {
-                err = ENOMEM;
-            }
-        }
-
-        if (err == 0) {
-            err = sysctl((int *)name, (sizeof(name) / sizeof(*name)) - 1, result, &length, NULL, 0);
-            if (err == -1) {
-                err = errno;
-            }
-            if (err == 0) {
-                done = 1;
-            } else if (err == ENOMEM) {
-                free(result);
-                result = NULL;
-                err = 0;
-            }
-        }
-    } while (err == 0 && !done);
-
-    if (err == 0 && result != NULL) {
-        *count = length / sizeof(struct kinfo_proc);
-        ProcessInfo *processes = (ProcessInfo *)malloc(*count * sizeof(ProcessInfo));
-
-        for (size_t i = 0; i < *count; i++) {
-            processes[i].pid = result[i].kp_proc.p_pid;
-            processes[i].processname = strdup(result[i].kp_proc.p_comm);
-        }
-
-        free(result);
-        return processes;
-    } else {
-        if (result != NULL) {
-            free(result);
-        }
-        debug_log("错误:枚举进程失败,错误码 %d\n", err);
+    if (sysctl(mib, 4, NULL, &size, NULL, 0) < 0) {
+        debug_log("错误:sysctl获取进程列表大小失败: %s\n", strerror(errno));
+        *count = 0;
         return NULL;
     }
+
+    procs = malloc(size);
+    if (!procs) {
+        debug_log("错误:malloc失败\n");
+        *count = 0;
+        return NULL;
+    }
+
+    if (sysctl(mib, 4, procs, &size, NULL, 0) < 0) {
+        debug_log("错误:sysctl获取进程列表失败: %s\n", strerror(errno));
+        free(procs);
+        *count = 0;
+        return NULL;
+    }
+
+    nprocs = size / sizeof(struct kinfo_proc);
+    result = malloc(nprocs * sizeof(ProcessInfo));
+    if (!result) {
+        debug_log("错误:malloc失败\n");
+        free(procs);
+        *count = 0;
+        return NULL;
+    }
+
+    for (i = 0; i < nprocs; i++) {
+        result[i].pid = procs[i].kp_proc.p_pid;
+        strncpy(result[i].processname, procs[i].kp_proc.p_comm, sizeof(result[i].processname) - 1);
+        result[i].processname[sizeof(result[i].processname) - 1] = '\0';
+    }
+
+    free(procs);
+    *count = nprocs;
+    return result;
 }
 
-// 暂停进程
-int suspend_process(pid_t pid) {
+// 挂起进程
+int suspend_process(int pid) {
     task_t task;
-    kern_return_t err;
-    int is_embedded_mode = pid == getpid();
-    if (is_embedded_mode) {
-        debug_log("错误:无法暂停自身进程\n");
-        return 0;
-    }
-    err = task_for_pid(mach_task_self(), pid, &task);
-    if (err != KERN_SUCCESS) {
-        debug_log("错误:task_for_pid失败,错误码 %d (%s)\n", err, mach_error_string(err));
-        return 0;
-    }
-    err = task_suspend(task);
-    if (err != KERN_SUCCESS) {
-        debug_log("错误:task_suspend失败,错误码 %d (%s)\n", err, mach_error_string(err));
-        return 0;
+    kern_return_t kr;
+
+    kr = task_for_pid(mach_task_self(), pid, &task);
+    if (kr != KERN_SUCCESS) {
+        debug_log("错误:task_for_pid失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
+        return -1;
     }
 
-    return 1;
+    kr = task_suspend(task);
+    if (kr != KERN_SUCCESS) {
+        debug_log("错误:task_suspend失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
+        return -1;
+    }
+
+    return 0;
 }
 
 // 恢复进程
-int resume_process(pid_t pid) {
+int resume_process(int pid) {
     task_t task;
-    kern_return_t err;
-    int is_embedded_mode = pid == getpid();
-    if (is_embedded_mode) {
-        debug_log("错误:无法恢复自身进程\n");
-        return 0;
-    }
-    err = task_for_pid(mach_task_self(), pid, &task);
-    if (err != KERN_SUCCESS) {
-        debug_log("错误:task_for_pid失败,错误码 %d (%s)\n", err, mach_error_string(err));
-        return 0;
-    }
-    err = task_resume(task);
-    if (err != KERN_SUCCESS) {
-        debug_log("错误:task_resume失败,错误码 %d (%s)\n", err, mach_error_string(err));
-        return 0;
+    kern_return_t kr;
+
+    kr = task_for_pid(mach_task_self(), pid, &task);
+    if (kr != KERN_SUCCESS) {
+        debug_log("错误:task_for_pid失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
+        return -1;
     }
 
-    return 1;
-}
-
-// 获取64位镜像大小
-static int get_image_size_64(void *header) {
-    struct mach_header_64 *mh = (struct mach_header_64 *)header;
-    struct load_command *lc = (struct load_command *)((char *)header + sizeof(struct mach_header_64));
-    for (uint32_t i = 0; i < mh->ncmds; i++) {
-        if (lc->cmd == LC_SEGMENT_64) {
-            struct segment_command_64 *seg = (struct segment_command_64 *)lc;
-            if (strcmp(seg->segname, "__PAGEZERO") != 0) {
-                return (int)(seg->vmaddr + seg->vmsize);
-            }
-        }
-        lc = (struct load_command *)((char *)lc + lc->cmdsize);
+    kr = task_resume(task);
+    if (kr != KERN_SUCCESS) {
+        debug_log("错误:task_resume失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
+        return -1;
     }
+
     return 0;
-}
-
-// 获取32位镜像大小
-static int get_image_size_32(void *header) {
-    struct mach_header *mh = (struct mach_header *)header;
-    struct load_command *lc = (struct load_command *)((char *)header + sizeof(struct mach_header));
-    for (uint32_t i = 0; i < mh->ncmds; i++) {
-        if (lc->cmd == LC_SEGMENT) {
-            struct segment_command *seg = (struct segment_command *)lc;
-            if (strcmp(seg->segname, "__PAGEZERO") != 0) {
-                return (int)(seg->vmaddr + seg->vmsize);
-            }
-        }
-        lc = (struct load_command *)((char *)lc + lc->cmdsize);
-    }
-    return 0;
-}
-
-// 获取模块大小
-static int get_module_size(void *header, int is_64bit) {
-    return is_64bit ? get_image_size_64(header) : get_image_size_32(header);
 }
 
 // 枚举模块
-ModuleInfo *enummodule_native(pid_t pid, size_t *count) {
+ModuleInfo* enummodule_native(int pid, size_t* count) {
     task_t task;
     kern_return_t kr;
     struct task_dyld_info dyld_info;
-    mach_msg_type_number_t count_out = TASK_DYLD_INFO_COUNT;
-    
-    if (pid == getpid()) {
-        task = mach_task_self();
-    } else {
-        kr = task_for_pid(mach_task_self(), pid, &task);
-        if (kr != KERN_SUCCESS) {
-            debug_log("错误:task_for_pid失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
-            return NULL;
-        }
+    mach_msg_type_number_t count_info = TASK_DYLD_INFO_COUNT;
+    ModuleInfo* modules = NULL;
+    size_t module_count = 0;
+
+    *count = 0;
+
+    kr = task_for_pid(mach_task_self(), pid, &task);
+    if (kr != KERN_SUCCESS) {
+        debug_log("错误:task_for_pid失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
+        return NULL;
     }
 
-    kr = task_info(task, TASK_DYLD_INFO, (task_info_t)&dyld_info, &count_out);
+    kr = task_info(task, TASK_DYLD_INFO, (task_info_t)&dyld_info, &count_info);
     if (kr != KERN_SUCCESS) {
         debug_log("错误:task_info失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
         return NULL;
     }
 
-    struct dyld_all_image_infos *all_image_infos = (struct dyld_all_image_infos *)dyld_info.all_image_info_addr;
     struct dyld_all_image_infos all_image_infos_data;
-    
-    mach_vm_size_t read_size;
-    kr = vm_read_overwrite(task, (mach_vm_address_t)all_image_infos, sizeof(struct dyld_all_image_infos), 
-                                (mach_vm_address_t)&all_image_infos_data, &read_size);
+    vm_size_t read_size;
+    kr = vm_read_overwrite(task, dyld_info.all_image_info_addr,
+                           sizeof(struct dyld_all_image_infos),
+                           (vm_address_t)&all_image_infos_data, &read_size);
     if (kr != KERN_SUCCESS) {
         debug_log("错误:vm_read_overwrite失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
         return NULL;
     }
 
     uint32_t image_count = all_image_infos_data.infoArrayCount;
-    struct dyld_image_info *image_infos = malloc(sizeof(struct dyld_image_info) * image_count);
-    
-    kr = vm_read_overwrite(task, (mach_vm_address_t)all_image_infos_data.infoArray, 
-                                sizeof(struct dyld_image_info) * image_count, 
-                                (mach_vm_address_t)image_infos, &read_size);
+    struct dyld_image_info* image_infos = malloc(sizeof(struct dyld_image_info) * image_count);
+    if (!image_infos) {
+        debug_log("错误:malloc失败\n");
+        return NULL;
+    }
+
+    kr = vm_read_overwrite(task, (vm_address_t)all_image_infos_data.infoArray,
+                           sizeof(struct dyld_image_info) * image_count,
+                           (vm_address_t)image_infos, &read_size);
     if (kr != KERN_SUCCESS) {
-        debug_log("错误:读取镜像信息失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
+        debug_log("错误:vm_read_overwrite失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
         free(image_infos);
         return NULL;
     }
 
-    ModuleInfo *modules = malloc(sizeof(ModuleInfo) * image_count);
-    *count = image_count;
+    modules = malloc(sizeof(ModuleInfo) * image_count);
+    if (!modules) {
+        debug_log("错误:malloc失败\n");
+        free(image_infos);
+        return NULL;
+    }
 
     for (uint32_t i = 0; i < image_count; i++) {
         char path[PATH_MAX];
-        kr = vm_read_overwrite(task, (mach_vm_address_t)image_infos[i].imageFilePath, 
-                                    PATH_MAX, (mach_vm_address_t)path, &read_size);
-        if (kr != KERN_SUCCESS) {
-            debug_log("错误:读取模块路径失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
+        kr = vm_read_overwrite(task, (vm_address_t)image_infos[i].imageFilePath,
+                               PATH_MAX, (vm_address_t)path, &read_size);
+if (kr != KERN_SUCCESS) {
+            debug_log("错误:vm_read_overwrite失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
             continue;
         }
 
-        modules[i].base = (uintptr_t)image_infos[i].imageLoadAddress;
-        modules[i].modulename = strdup(path);
-
-        // 读取Mach-O头以确定是否为64位
-        struct mach_header header;
-        kr = vm_read_overwrite(task, (mach_vm_address_t)image_infos[i].imageLoadAddress, 
-                                    sizeof(struct mach_header), (mach_vm_address_t)&header, &read_size);
-        if (kr != KERN_SUCCESS) {
-            debug_log("错误:读取Mach-O头失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
-            modules[i].is_64bit = 0;
-            modules[i].size = 0;
-            continue;
-        }
-
-        modules[i].is_64bit = (header.magic == MH_MAGIC_64 || header.magic == MH_CIGAM_64);
-        
-        // 读取完整的Mach-O头以获取模块大小
-        size_t header_size = modules[i].is_64bit ? sizeof(struct mach_header_64) : sizeof(struct mach_header);
-        void *full_header = malloc(header_size + header.sizeofcmds);
-        
-        kr = vm_read_overwrite(task, (mach_vm_address_t)image_infos[i].imageLoadAddress, 
-                                    header_size + header.sizeofcmds, (mach_vm_address_t)full_header, &read_size);
-        if (kr != KERN_SUCCESS) {
-            debug_log("错误:读取完整Mach-O头失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
-            modules[i].size = 0;
+        path[PATH_MAX - 1] = '\0';
+        const char* filename = strrchr(path, '/');
+        if (filename) {
+            filename++;
         } else {
-            modules[i].size = get_module_size(full_header, modules[i].is_64bit);
+            filename = path;
         }
-        
-        free(full_header);
+
+        strncpy(modules[module_count].modulename, filename, sizeof(modules[module_count].modulename) - 1);
+        modules[module_count].modulename[sizeof(modules[module_count].modulename) - 1] = '\0';
+        modules[module_count].baseaddress = (uint64_t)image_infos[i].imageLoadAddress;
+        module_count++;
     }
 
     free(image_infos);
+    *count = module_count;
     return modules;
+}
+
+// 获取模块信息
+int get_module_information_native(int pid, const char* modulename, ModuleInfo* info) {
+    size_t count;
+    ModuleInfo* modules = enummodule_native(pid, &count);
+    if (!modules) {
+        return -1;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        if (strcmp(modules[i].modulename, modulename) == 0) {
+            *info = modules[i];
+            free(modules);
+            return 0;
+        }
+    }
+
+    free(modules);
+    return -1;
+}
+
+// 初始化函数
+__attribute__((constructor))
+static void initialize() {
+    void* handle = dlopen("/usr/lib/libproc.dylib", RTLD_LAZY);
+    if (handle) {
+        proc_regionfilename = (PROC_REGIONFILENAME)dlsym(handle, "proc_regionfilename");
+        if (!proc_regionfilename) {
+            debug_log("警告:无法加载proc_regionfilename函数\n");
+        }
+    } else {
+        debug_log("警告:无法加载libproc.dylib\n");
+    }
+}
+
+// 获取内存区域文件名
+char* get_region_filename(int pid, uint64_t address) {
+    if (!proc_regionfilename) {
+        return NULL;
+    }
+
+    char* buffer = malloc(PATH_MAX);
+    if (!buffer) {
+        return NULL;
+    }
+
+    if (proc_regionfilename(pid, address, buffer, PATH_MAX) <= 0) {
+        free(buffer);
+        return NULL;
+    }
+
+    return buffer;
+}
+
+// 获取基址
+uint64_t get_base_address(int pid, const char* module_name) {
+    ModuleInfo info;
+    if (get_module_information_native(pid, module_name, &info) == 0) {
+        return info.baseaddress;
+    }
+    return 0;
+}
+
+// 获取模块大小
+uint64_t get_module_size(int pid, const char* module_name) {
+    task_t task;
+    kern_return_t kr;
+    mach_vm_address_t address;
+    mach_vm_size_t size;
+    vm_region_basic_info_data_64_t info;
+    mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
+    mach_port_t object_name;
+
+    kr = task_for_pid(mach_task_self(), pid, &task);
+    if (kr != KERN_SUCCESS) {
+        debug_log("错误:task_for_pid失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
+        return 0;
+    }
+
+    address = get_base_address(pid, module_name);
+    if (address == 0) {
+        return 0;
+    }
+
+    kr = vm_region_64(task, &address, &size, VM_REGION_BASIC_INFO_64,
+                      (vm_region_info_t)&info, &info_count, &object_name);
+    if (kr != KERN_SUCCESS) {
+        debug_log("错误:vm_region_64失败,错误码 %d (%s)\n", kr, mach_error_string(kr));
+        return 0;
+    }
+
+    return size;
 }
