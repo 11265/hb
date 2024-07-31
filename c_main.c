@@ -5,7 +5,7 @@
 #include <mach/mach.h>
 #include <mach/vm_map.h>
 
-#define PAGE_SIZE 4096
+#define MY_PAGE_SIZE 4096
 
 // 这个函数需要在内核扩展中实现
 extern kern_return_t replace_pte(task_t src_task, vm_address_t src_addr, 
@@ -34,7 +34,7 @@ void* read_memory(vm_address_t target_addr, size_t size) {
     }
 
     // 替换PTE
-    for (vm_address_t offset = 0; offset < size; offset += PAGE_SIZE) {
+    for (vm_address_t offset = 0; offset < size; offset += MY_PAGE_SIZE) {
         kr = replace_pte(mach_task_self(), local_addr + offset,
                          target_task, target_addr + offset);
         if (kr != KERN_SUCCESS) {
@@ -69,7 +69,7 @@ int write_memory(vm_address_t target_addr, const void* data, size_t size) {
     }
 
     // 替换PTE
-    for (vm_address_t offset = 0; offset < size; offset += PAGE_SIZE) {
+    for (vm_address_t offset = 0; offset < size; offset += MY_PAGE_SIZE) {
         kr = replace_pte(mach_task_self(), local_addr + offset,
                          target_task, target_addr + offset);
         if (kr != KERN_SUCCESS) {
@@ -87,8 +87,7 @@ int write_memory(vm_address_t target_addr, const void* data, size_t size) {
 }
 
 // 使用示例
-int c_main()
-{
+int c_main(int argc, char *argv[]) {
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <target_pid>\n", argv[0]);
         return 1;
