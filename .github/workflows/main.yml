@@ -1,4 +1,4 @@
-name: iOS Build
+name: Build Memory Server
 
 on:
   push:
@@ -13,27 +13,19 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: Select Xcode
-      run: sudo xcode-select -s /Applications/Xcode.app
-
-    - name: Setup iOS SDK
+    - name: Install dependencies
       run: |
-        SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
-        echo "SDKROOT=$SDKROOT" >> $GITHUB_ENV
+        brew update
+        brew install gcc
 
-    - name: List directory contents
-      run: ls -la
-
-    - name: Compile C file
+    - name: Build
       run: |
-        xcrun -sdk iphoneos clang -c c_main.c -o c_main.o -arch arm64 -mios-version-min=14.0
-
-    - name: Link object file
-      run: |
-        xcrun -sdk iphoneos clang c_main.o -o main -arch arm64 -mios-version-min=14.0 -framework Foundation -framework CoreFoundation
+        gcc -c memory_server_api.c -o memory_server_api.o
+        gcc -c main.c -o main.o
+        gcc memory_server_api.o main.o -o memory_server
 
     - name: Upload artifact
       uses: actions/upload-artifact@v2
       with:
-        name: ios-arm64-binary
-        path: main
+        name: memory-server
+        path: memory_server
