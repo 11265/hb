@@ -87,7 +87,8 @@ int write_memory(vm_address_t target_addr, const void* data, size_t size) {
 }
 
 // 使用示例
-int main(int argc, char* argv[]) {
+int c_main()
+{
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <target_pid>\n", argv[0]);
         return 1;
