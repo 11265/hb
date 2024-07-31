@@ -24,9 +24,9 @@ jobs:
     - name: List directory contents
       run: ls -la
 
-    - name: Compile main.c
+    - name: Compile main.mm
       run: |
-        xcrun -sdk iphoneos clang -c main.c -o main.o -arch arm64 -mios-version-min=14.0
+        xcrun -sdk iphoneos clang -c main.mm -o main.o -arch arm64 -mios-version-min=14.0
 
     - name: Assemble main.s
       run: |
