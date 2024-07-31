@@ -32,9 +32,9 @@ int c_main(void) {
         for (int i = 0; i < READS_PER_SECOND; i++) {
             printf("读取次数: %d\n", i + 1);
             printf("读取 int32: %d\n", 读内存i32(test_address));
-            printf("读取 int64: %lld\n", 读内存i64(test_address));
-            printf("读取 float: %f\n", 读内存f32(test_address));
-            printf("读取 double: %f\n", 读内存f64(test_address));
+            //printf("读取 int64: %lld\n", 读内存i64(test_address));
+            //printf("读取 float: %f\n", 读内存f32(test_address));
+            //printf("读取 double: %f\n", 读内存f64(test_address));
             printf("\n");
 
             // 休眠一段时间，以达到每秒10次的频率
