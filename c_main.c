@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <mach/mach.h>
 
 #define TARGET_PROCESS_NAME "pvz"
 
@@ -24,33 +25,52 @@ int c_main() {
 
     printf("内存模块初始化成功\n");
 
-    // 测试读写不同类型的内存
-    vm_address_t test_address = 0x1060E1388; // 假设这是一个有效的内存地址
-
-    // 读取 int32
-    int32_t* read_value = (int32_t*)读任意地址(test_address, sizeof(int32_t));
-    if (read_value) {
-        printf("读取 int32: %d\n", *read_value);
-        free(read_value);
-    } else {
-        printf("读取 int32 失败\n");
+    // 列出内存区域
+    mach_port_t task;
+    kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &task);
+    if (kr != KERN_SUCCESS) {
+        printf("无法获取目标进程的task端口\n");
+        关闭内存模块();
+        return 1;
     }
 
-    // 测试写入和读取 int32_t
-    int32_t test_i32 = 12345;
-    if (写任意地址(test_address, &test_i32, sizeof(int32_t)) == 0) {
-        printf("写入 int32 成功: %d\n", test_i32);
-        
-        // 再次读取以验证写入是否成功
-        int32_t* verify_value = (int32_t*)读任意地址(test_address, sizeof(int32_t));
-        if (verify_value) {
-            printf("验证读取 int32: %d\n", *verify_value);
-            free(verify_value);
+    vm_address_t address = 0;
+    vm_size_t size;
+    uint32_t depth = 0;
+    while (1) {
+        vm_region_submap_info_data_64_t info;
+        mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_COUNT_64;
+        kr = vm_region_recurse_64(task, &address, &size, &depth,
+                                  (vm_region_info_t)&info, &count);
+        if (kr != KERN_SUCCESS) break;
+
+        printf("Region: 0x%llx - 0x%llx (%llu bytes)\n", address, address + size, size);
+
+        // 尝试读取这个区域的开始部分
+        void* data = 读任意地址(address, sizeof(int32_t));
+        if (data) {
+            printf("  读取成功: 0x%x\n", *(int32_t*)data);
+            free(data);
+
+            // 尝试写入
+            int32_t test_value = 0x12345678;
+            if (写任意地址(address, &test_value, sizeof(int32_t)) == 0) {
+                printf("  写入成功\n");
+                // 验证写入
+                data = 读任意地址(address, sizeof(int32_t));
+                if (data && *(int32_t*)data == test_value) {
+                    printf("  验证成功\n");
+                }
+                free(data);
+            } else {
+                printf("  写入失败\n");
+            }
         } else {
-            printf("验证读取 int32 失败\n");
+            printf("  读取失败\n");
         }
-    } else {
-        printf("写入 int32 失败\n");
+
+        address += size;
+        if (depth == 0) break;
     }
 
     关闭内存模块();
