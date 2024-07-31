@@ -72,7 +72,7 @@ MemoryRegion* get_or_create_page(vm_address_t address) {
     }
     
     mach_vm_size_t bytes_read;
-    kern_return_t kr = vm_read_overwrite(target_task, page_address, vm_page_size, (vm_address_t)mapped_memory, &bytes_read);//
+    kern_return_t kr = vm_read_overwrite(target_task, page_address, vm_page_size, (vm_address_t)mapped_memory, &bytes_read);
     if (kr != KERN_SUCCESS || bytes_read != vm_page_size) {
         munmap(mapped_memory, vm_page_size);
         pthread_mutex_unlock(&regions_mutex);
@@ -153,62 +153,6 @@ int 写任意地址(vm_address_t address, const void* data, size_t size) {
     }
 }
 
-int32_t 读内存i32(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(int32_t));
-    if (!data) {
-        return 0;
-    }
-    int32_t result = *(int32_t*)data;
-    free(data);
-    return result;
-}
-
-int64_t 读内存i64(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(int64_t));
-    if (!data) {
-        return 0;
-    }
-    int64_t result = *(int64_t*)data;
-    free(data);
-    return result;
-}
-
-float 读内存f32(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(float));
-    if (!data) {
-        return 0.0f;
-    }
-    float result = *(float*)data;
-    free(data);
-    return result;
-}
-
-double 读内存f64(vm_address_t address) {
-    void* data = 读任意地址(address, sizeof(double));
-    if (!data) {
-        return 0.0;
-    }
-    double result = *(double*)data;
-    free(data);
-    return result;
-}
-
-int 写内存i32(vm_address_t address, int32_t value) {
-    return 写任意地址(address, &value, sizeof(int32_t));
-}
-
-int 写内存i64(vm_address_t address, int64_t value) {
-    return 写任意地址(address, &value, sizeof(int64_t));
-}
-
-int 写内存f32(vm_address_t address, float value) {
-    return 写任意地址(address, &value, sizeof(float));
-}
-
-int 写内存f64(vm_address_t address, double value) {
-    return 写任意地址(address, &value, sizeof(double));
-}
-
 void* 处理内存请求(void* arg) {
     while (1) {
         pthread_mutex_lock(&requests_mutex);
@@ -256,20 +200,20 @@ int 初始化内存模块(pid_t pid) {
     target_pid = pid;
     kern_return_t kr = task_for_pid(mach_task_self(), target_pid, &target_task);
     if (kr != KERN_SUCCESS) {
-        printf("获取进程 %d 的 task 失败: %s\n", pid, mach_error_string(kr));
+        printf("Failed to get task for pid %d: %s\n", pid, mach_error_string(kr));
         return -1;
     }
     
     cached_regions = malloc(max_cached_regions * sizeof(MemoryRegion));
     if (!cached_regions) {
-        printf("为缓存区域分配内存失败\n");
+        printf("Failed to allocate memory for cached regions\n");
         return -1;
     }
     
     for (int i = 0; i < NUM_THREADS; i++) {
         thread_pool[i].id = i;
         if (pthread_create(&thread_pool[i].thread, NULL, mapper_thread_func, &thread_pool[i]) != 0) {
-            printf("创建线程 %d 失败\n", i);
+            printf("Failed to create thread %d\n", i);
             return -1;
         }
     }
@@ -277,11 +221,28 @@ int 初始化内存模块(pid_t pid) {
     if (pthread_mutex_init(&regions_mutex, NULL) != 0 ||
         pthread_mutex_init(&requests_mutex, NULL) != 0 ||
         pthread_cond_init(&request_cond, NULL) != 0) {
-        printf("初始化互斥锁或条件变量失败\n");
+        printf("Failed to initialize mutex or condition variable\n");
         return -1;
     }
     
-    printf("内存模块已成功初始化，目标进程 PID: %d\n", pid);
+    vm_address_t address = 0;
+    vm_size_t size = 0;
+    natural_t depth = 0;
+    while (1) {
+        vm_region_submap_info_data_64_t info;
+        mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_COUNT_64;
+        kr = vm_region_recurse_64(target_task, &address, &size, &depth, (vm_region_info_t)&info, &count);
+        if (kr != KERN_SUCCESS) break;
+
+        kr = vm_protect(target_task, address, size, FALSE, VM_PROT_READ | VM_PROT_WRITE);
+        if (kr != KERN_SUCCESS) {
+            printf("Warning: Failed to set memory protection for region at %lx: %s\n", address, mach_error_string(kr));
+        }
+
+        address += size;
+    }
+
+    printf("Memory module initialized successfully for pid %d\n", pid);
     return 0;
 }
 
