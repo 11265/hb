@@ -40,5 +40,6 @@ int c_main(void) {
     }
 
     关闭内存模块();
+    printf("关闭内存模块\n");
     return 0;
 }
