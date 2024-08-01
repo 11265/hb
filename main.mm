@@ -706,8 +706,11 @@ extern "C"  pid_t get_pid_by_name(const char *process_name)
 
 extern "C" int c_main() 
 {
-    // 打印欢迎语句
-    //NSLog(@"欢迎使用这个iOS应用！");
+    pid_t target_pid = get_pid_by_name(TARGET_PROCESS_NAME);
+    if (target_pid == -1) {
+        debug_log(stderr, "未找到进程：%s\n", TARGET_PROCESS_NAME);
+        return -1;
+    }
     debug_log("Warning: proc_regionfilename is not available. Some ""functionality may be limited.\n");
     
     // 在这里实现您的主要逻辑
