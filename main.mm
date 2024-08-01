@@ -765,6 +765,9 @@ extern "C" uintptr_t find_module_base(pid_t pid, const char *module_name) {
     //pid_t target_pid = 12345;  // 替换为实际的目标进程 ID
 mach_vm_address_t target_address = 0x1060E1388; // 替换为实际的内存地址
 
+mach_vm_address_t 偏移1 = 0x20A7AA0; // 替换为实际的内存地址
+mach_vm_address_t 偏移2 = 0x400; // 替换为实际的内存地址
+
 extern "C" int c_main() 
 {   //查找进程名称
     pid_t target_pid = get_pid_by_name(TARGET_PROCESS_NAME);
@@ -810,6 +813,22 @@ extern "C" int c_main()
     } else {
         debug_log("模块 %s 的基地址: 0x%lx\n", module_name, base_address);
     }
+
+    // 第二级读取
+    ssize_t bytes_read = read_memory_native(target_pid, base_address + 偏移1, sizeof(int32_t), reinterpret_cast<unsigned char*>(&value));
+    if (bytes_read == sizeof(int32_t)) {
+        debug_log("读i32值: %d\n", value);
+    } else {
+        debug_log("读取内存失败或读取大小不匹配，读取字节数: %zd\n", bytes_read);
+    }
+
+    // 最终读取目标值
+    int32_t final_value;
+    if (read_memory_native(target_pid, bytes_read + 偏移2, sizeof(int32_t), reinterpret_cast<unsigned char*>(&final_value)) == sizeof(int32_t)) {
+        printf("读取的最终值: %d\n", final_value);
+    } else {
+        printf("读取最终值失败\n");
+    }
 /*
     //跨进程读取内存
     int32_t value;
@@ -826,6 +845,7 @@ extern "C" int c_main()
         usleep(1000000 / 60);  // 16,666微秒
     }
 */
+/*
     //跨进程读取内存
     int32_t value;
 
@@ -835,7 +855,7 @@ extern "C" int c_main()
     } else {
             debug_log("读取内存失败或读取大小不匹配，读取字节数: %zd\n", bytes_read);
     }
-
+*/
 //--------------------------------------------
 /*
     // 要写入的数据
