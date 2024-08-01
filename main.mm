@@ -376,7 +376,7 @@ extern "C" bool resume_process(pid_t pid)
 
     return true;
 }// 恢复指定进程的函数
-
+//-----------------------------------------------------------------------------------------------------------------------------------------
 static std::uint64_t get_image_size_64(int pid, mach_vm_address_t base_address)
 {
     mach_header_64 header;
@@ -462,66 +462,77 @@ static std::uint64_t get_image_size_32(int pid, mach_vm_address_t base_address)
 static std::uint64_t get_module_size(int pid, mach_vm_address_t address, bool *is_64bit)
 {
     std::uint32_t magic;
+    // 从指定地址读取 Mach-O 魔数
     if (read_memory_native(pid, address, sizeof(std::uint32_t),
                            reinterpret_cast<unsigned char *>(&magic)) <= 0)
     {
-        debug_log("Error: Failed to read Mach-O magic number\n");
+        debug_log("错误：读取 Mach-O 魔数失败\n");
         return 0;
     }
 
+    // 检查魔数以确定文件格式
     if (magic == MH_MAGIC_64)
     {
         *is_64bit = true;
+        // 如果是 64 位 Mach-O 文件，获取其大小
         return get_image_size_64(pid, address);
     }
     else if (magic == MH_MAGIC)
     {
         *is_64bit = false;
+        // 如果是 32 位 Mach-O 文件，获取其大小
         return get_image_size_32(pid, address);
     }
     else if (magic == FAT_MAGIC || magic == FAT_CIGAM)
     {
         fat_header fatHeader;
+        // 读取 FAT 文件头
         if (read_memory_native(pid, address, sizeof(fat_header),
                                reinterpret_cast<unsigned char *>(&fatHeader)) <= 0)
         {
-            debug_log("Error: Failed to read FAT header\n");
+            debug_log("错误：读取 FAT 文件头失败\n");
             return 0;
         }
 
         std::vector<fat_arch> archs(fatHeader.nfat_arch);
+        // 读取 FAT 文件的所有架构
         if (read_memory_native(pid, address + sizeof(fat_header),
                                fatHeader.nfat_arch * sizeof(fat_arch),
                                reinterpret_cast<unsigned char *>(archs.data())) <= 0)
         {
-            debug_log("Error: Failed to read FAT architectures\n");
+            debug_log("错误：读取 FAT 架构失败\n");
             return 0;
         }
 
+        // 遍历所有架构，检查每个架构的魔数
         for (const auto &arch : archs)
         {
             if (read_memory_native(pid, address + arch.offset, sizeof(std::uint32_t),
                                    reinterpret_cast<unsigned char *>(&magic)) <= 0)
             {
-                debug_log("Error: Failed to read Mach-O magic number in FAT binary\n");
+                debug_log("错误：读取 FAT 二进制中的 Mach-O 魔数失败\n");
                 continue;
             }
             if (magic == MH_MAGIC_64)
             {
                 *is_64bit = true;
+                // 如果是 64 位 Mach-O 文件，获取其大小
                 return get_image_size_64(pid, address + arch.offset);
             }
             else if (magic == MH_MAGIC)
             {
                 *is_64bit = false;
+                // 如果是 32 位 Mach-O 文件，获取其大小
                 return get_image_size_32(pid, address + arch.offset);
             }
         }
     }
 
-    debug_log("Error: Unknown Mach-O format\n");
+    // 如果无法识别文件格式，返回 0
+    debug_log("错误：未知的 Mach-O 格式\n");
     return 0;
 }
+//----------------------------------------------------------------------------------------------------
 
 //用于获取指定进程的模块信息
 extern "C" ModuleInfo *enummodule_native(pid_t pid, size_t *count)
@@ -723,6 +734,15 @@ extern "C" int c_main()
     }
     debug_log("找到进程 %s，PID: %d\n", TARGET_PROCESS_NAME, target_pid);
     
+    size_t module_count;
+    ModuleInfo *modules = enummodule_native(target_pid, &module_count);
+
+    if (modules == nullptr) 
+    {
+        printf("无法获取模块信息\n");
+        return -1;
+    }
+
     // 在这里实现您的主要逻辑
     debug_log("运行结束.\n");
     return 0;
