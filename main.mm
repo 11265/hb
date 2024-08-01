@@ -739,9 +739,10 @@ extern "C" int c_main()
 
     if (modules == nullptr) 
     {
-        printf("无法获取模块信息\n");
+        debug_log("无法获取模块信息\n");
         return -1;
     }
+    debug_log("模块数量: %zu\n", module_count);
 
     // 在这里实现您的主要逻辑
     debug_log("运行结束.\n");
