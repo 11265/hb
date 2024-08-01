@@ -834,9 +834,9 @@ extern "C" int c_main()
     // 调用函数写入数据
     ssize_t bytes_written = write_memory_native(target_pid, target_address, sizeof(new_value), buffer);
     if (bytes_written == sizeof(new_value)) {
-        printf("成功写入 i32 值: %d\n", new_value);
+        debug_log("成功写入 i32 值: %d\n", new_value);
     } else {
-        printf("写入内存失败，写入字节数: %zd\n", bytes_written);
+        debug_log("写入内存失败，写入字节数: %zd\n", bytes_written);
     }
 
     // 释放分配的内存
