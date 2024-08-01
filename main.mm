@@ -814,7 +814,8 @@ extern "C" int c_main()
 
     ssize_t bytes_read = read_memory_native(target_pid, address, size, buffer);
 
-    if (bytes_read == sizeof(int)) {
+    if (bytes_read == sizeof(int)) 
+    {
         // 将 buffer 转换为 i32
         int value;
         memcpy(&value, buffer, sizeof(int));
