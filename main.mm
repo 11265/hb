@@ -724,7 +724,7 @@ extern "C"  pid_t get_pid_by_name(const char *process_name)
 }
 
 // 不区分大小写的字符串比较
-extern "C" bool strcasecmp(const char *s1, const char *s2) {
+extern "C" bool my_strcasecmp(const char *s1, const char *s2) {
     while (*s1 && *s2 && std::tolower(static_cast<unsigned char>(*s1)) == std::tolower(static_cast<unsigned char>(*s2))) {
         ++s1;
         ++s2;
@@ -732,7 +732,7 @@ extern "C" bool strcasecmp(const char *s1, const char *s2) {
     return (std::tolower(static_cast<unsigned char>(*s1)) == std::tolower(static_cast<unsigned char>(*s2)));
 }
 // 查找指定模块名称的函数
-extern "C"  uintptr_t find_module_base(pid_t pid, const char *module_name) {
+extern "C" uintptr_t find_module_base(pid_t pid, const char *module_name) {
     size_t module_count;
     ModuleInfo *modules = enummodule_native(pid, &module_count);
     
@@ -743,7 +743,7 @@ extern "C"  uintptr_t find_module_base(pid_t pid, const char *module_name) {
 
     uintptr_t base_address = 0;
     for (size_t i = 0; i < module_count; ++i) {
-        if (strcasecmp(modules[i].modulename, module_name) == 0) {
+        if (my_strcasecmp(modules[i].modulename, module_name) == 0) {
             base_address = modules[i].base;
             break;
         }
