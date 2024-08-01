@@ -785,7 +785,7 @@ extern "C" int c_main()
     uintptr_t base_address = find_module_base(target_pid, module_name);
     if (base_address == 0) {
         debug_log("未找到模块：%s\n", module_name);
-        free(modules);
+        //free(modules);
         return -1;
     }
     debug_log("模块名称: %s\n", module_name);
