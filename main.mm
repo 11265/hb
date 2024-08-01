@@ -722,7 +722,8 @@ extern "C"  pid_t get_pid_by_name(const char *process_name)
 }
 
 // 查找指定模块名称的函数
-uintptr_t find_module_base(pid_t pid, const char *module_name) {
+extern "C"  uintptr_t find_module_base(pid_t pid, const char *module_name) 
+{
     size_t module_count;
     ModuleInfo *modules = enummodule_native(pid, &module_count);
     
@@ -786,9 +787,9 @@ extern "C" int c_main()
     uintptr_t base_address = find_module_base(target_pid, module_name);
     
     if (base_address == 0) {
-        printf("未找到模块：%s\n", module_name);
+        debug_log("未找到模块：%s\n", module_name);
     } else {
-        printf("模块 %s 的基地址: 0x%lx\n", module_name, base_address);
+        debug_log("模块 %s 的基地址: 0x%lx\n", module_name, base_address);
     }
 
     // 释放分配的内存
