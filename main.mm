@@ -712,9 +712,9 @@ extern "C" int c_main()
         debug_log("未找到进程：%s\n", TARGET_PROCESS_NAME);
         return -1;
     }
-    debug_log("Warning: proc_regionfilename is not available. Some ""functionality may be limited.\n");
+    debug_log("找到进程 %s，PID: %d\n", TARGET_PROCESS_NAME, target_pid);
     
     // 在这里实现您的主要逻辑
-    
+    debug_log("运行结束.\n");
     return 0;
 }
