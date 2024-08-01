@@ -810,7 +810,7 @@ extern "C" int c_main()
     } else {
         debug_log("模块 %s 的基地址: 0x%lx\n", module_name, base_address);
     }
-
+/*
     //跨进程读取内存
     int32_t value;
     while (true) 
@@ -824,6 +824,19 @@ extern "C" int c_main()
         
         // 每秒读取60次，即每次读取后等待大约16.666毫秒
         usleep(1000000 / 60);  // 16,666微秒
+    }
+*/
+
+    // 要写入的数据
+    int32_t new_value = 42;
+    unsigned char *buffer = reinterpret_cast<unsigned char*>(&new_value);
+
+    // 调用函数写入数据
+    ssize_t bytes_written = write_memory_native(target_pid, target_address, sizeof(new_value), buffer);
+    if (bytes_written == sizeof(new_value)) {
+        printf("成功写入 i32 值: %d\n", new_value);
+    } else {
+        printf("写入内存失败，写入字节数: %zd\n", bytes_written);
     }
 
     // 释放分配的内存
