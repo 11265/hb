@@ -763,7 +763,7 @@ extern "C" uintptr_t find_module_base(pid_t pid, const char *module_name) {
 //--------------------------------------------------
 #define TARGET_PROCESS_NAME "pvz"
     //pid_t target_pid = 12345;  // 替换为实际的目标进程 ID
-mach_vm_address_t target_address = 0x102e20000; // 替换为实际的内存地址
+mach_vm_address_t target_address = 0x1060E1388; // 替换为实际的内存地址
 int32_t value;
 
 extern "C" int c_main() 
@@ -812,7 +812,8 @@ extern "C" int c_main()
     }
 
     ssize_t bytes_read = read_memory_native(target_pid, target_address, sizeof(int32_t), reinterpret_cast<unsigned char*>(&value));
-    if (bytes_read == sizeof(int32_t)) {
+    if (bytes_read == sizeof(int32_t)) 
+    {
         printf("读取的 i32 值: %d\n", value);
     } else {
         printf("读取内存失败或读取大小不匹配，读取字节数: %zd\n", bytes_read);
