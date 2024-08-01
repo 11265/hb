@@ -820,10 +820,9 @@ extern "C" int c_main()
         int value;
         memcpy(&value, buffer, sizeof(int));
         
-        std::cout << "Read i32 value: " << value << std::endl;
+        debug_log("Read i32 value: %s\n" , value );
     } else {
-        std::cerr << "Failed to read memory or read size mismatch" << std::endl;
-    }
+        debug_log("Failed to read memory or read size mismatch");
 
     // 释放分配的内存
     free(modules);
