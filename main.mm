@@ -811,12 +811,17 @@ extern "C" int c_main()
         debug_log("模块 %s 的基地址: 0x%lx\n", module_name, base_address);
     }
 
-    ssize_t bytes_read = read_memory_native(target_pid, target_address, sizeof(int32_t), reinterpret_cast<unsigned char*>(&value));
-    if (bytes_read == sizeof(int32_t)) 
+    while (true) 
     {
-        printf("读取的 i32 值: %d\n", value);
-    } else {
-        printf("读取内存失败或读取大小不匹配，读取字节数: %zd\n", bytes_read);
+        ssize_t bytes_read = read_memory_native(target_pid, target_address, sizeof(int32_t), reinterpret_cast<unsigned char*>(&value));
+        if (bytes_read == sizeof(int32_t)) {
+            printf("读取的i32值: %d\n", value);
+        } else {
+            printf("读取内存失败或读取大小不匹配，读取字节数: %zd\n", bytes_read);
+        }
+        
+        // 每秒读取一次
+        sleep(1);
     }
 
     // 释放分配的内存
