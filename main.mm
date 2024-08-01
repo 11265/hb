@@ -702,7 +702,10 @@ extern "C"  pid_t get_pid_by_name(const char *process_name)
 }
 
 //--------------------------------------------------
-extern "C" int c_main() {
+#define TARGET_PROCESS_NAME "pvz"
+
+extern "C" int c_main() 
+{
     // 打印欢迎语句
     //NSLog(@"欢迎使用这个iOS应用！");
     debug_log("Warning: proc_regionfilename is not available. Some ""functionality may be limited.\n");
