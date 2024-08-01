@@ -15,6 +15,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <stdbool.h>  // 添加这行
 
 // 其他必要的头文件
 typedef struct
@@ -628,47 +629,36 @@ extern "C" int native_init()
     return 1;
 }
 
-extern "C"  static int get_proc_list(kinfo_proc **procList, size_t *procCount) {
-    int                 err;
-    kinfo_proc *        result;
-    bool                done;
-    static const int    name[] = { CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0 };
-    size_t              length;
+extern "C" int get_proc_list(kinfo_proc **procList, size_t *procCount) {
+    int err;
+    kinfo_proc *result = NULL;
+    bool done = false;
+    static const int name[] = { CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0 };
+    size_t length;
 
     *procCount = 0;
 
-    result = NULL;
-    done = false;
     do {
         length = 0;
-        err = sysctl((int *)name, (sizeof(name) / sizeof(*name)) - 1,
-                     NULL, &length,
-                     NULL, 0);
+        err = sysctl((int *)name, (sizeof(name) / sizeof(*name)) - 1, NULL, &length, NULL, 0);
         if (err == -1) {
             err = errno;
+            break;
         }
 
-        if (err == 0) {
-            result = malloc(length);
-            if (result == NULL) {
-                err = ENOMEM;
-            }
+        result = (kinfo_proc *)malloc(length);
+        if (result == NULL) {
+            err = ENOMEM;
+            break;
         }
 
-        if (err == 0) {
-            err = sysctl((int *)name, (sizeof(name) / sizeof(*name)) - 1,
-                         result, &length,
-                         NULL, 0);
-            if (err == -1) {
-                err = errno;
-            }
-            if (err == 0) {
-                done = true;
-            } else if (err == ENOMEM) {
-                free(result);
-                result = NULL;
-                err = 0;
-            }
+        err = sysctl((int *)name, (sizeof(name) / sizeof(*name)) - 1, result, &length, NULL, 0);
+        if (err == -1) {
+            err = errno;
+            free(result);
+            result = NULL;
+        } else {
+            done = true;
         }
     } while (err == 0 && !done);
 
@@ -684,6 +674,7 @@ extern "C"  static int get_proc_list(kinfo_proc **procList, size_t *procCount) {
 
     return err;
 }
+
 
 extern "C"  pid_t get_pid_by_name(const char *process_name) 
 {
