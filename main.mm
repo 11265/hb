@@ -766,7 +766,7 @@ extern "C" uintptr_t find_module_base(pid_t pid, const char *module_name) {
 mach_vm_address_t target_address = 0x1060E1388; // 替换为实际的内存地址
 
 extern "C" int c_main() 
-{
+{   //查找进程名称
     pid_t target_pid = get_pid_by_name(TARGET_PROCESS_NAME);
     if (target_pid == -1) 
     {
@@ -775,6 +775,7 @@ extern "C" int c_main()
     }
     debug_log("找到进程: %s，PID: %d\n", TARGET_PROCESS_NAME, target_pid);
     
+    //遍历进程模块
     size_t module_count;
     ModuleInfo *modules = enummodule_native(target_pid, &module_count);
 
@@ -809,7 +810,8 @@ extern "C" int c_main()
     } else {
         debug_log("模块 %s 的基地址: 0x%lx\n", module_name, base_address);
     }
-    
+
+    //跨进程读取内存
     int32_t value;
     while (true) 
     {
@@ -821,7 +823,7 @@ extern "C" int c_main()
         }
         
         // 每秒读取一次
-        sleep(1);
+        sleep(60);
     }
 
     // 释放分配的内存
@@ -830,5 +832,3 @@ extern "C" int c_main()
 
     return 0;
 }
-
-
