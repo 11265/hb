@@ -732,7 +732,7 @@ extern "C" int c_main()
         debug_log("未找到进程：%s\n", TARGET_PROCESS_NAME);
         return -1;
     }
-    debug_log("找到进程 %s，PID: %d\n", TARGET_PROCESS_NAME, target_pid);
+    debug_log("找到进程: %s，PID: %d\n", TARGET_PROCESS_NAME, target_pid);
     
     size_t module_count;
     ModuleInfo *modules = enummodule_native(target_pid, &module_count);
@@ -744,7 +744,17 @@ extern "C" int c_main()
     }
     debug_log("模块数量: %zu\n", module_count);
 
-    // 在这里实现您的主要逻辑
+    for (size_t i = 0; i < module_count; ++i) 
+    {
+        debug_log("模块名称: %s\n", modules[i].modulename.c_str());
+        debug_log("基地址: 0x%lx\n", modules[i].base);
+        debug_log("大小: %d bytes\n", modules[i].size);
+        debug_log("64位: %s\n", modules[i].is_64bit ? "是" : "否");
+    }
+
+    // 释放分配的内存
+    free(modules);
     debug_log("运行结束.\n");
+    
     return 0;
 }
