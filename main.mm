@@ -721,6 +721,35 @@ extern "C"  pid_t get_pid_by_name(const char *process_name)
     return target_pid;
 }
 
+// 查找指定模块名称的函数
+uintptr_t find_module_base(pid_t pid, const char *module_name) {
+    size_t module_count;
+    ModuleInfo *modules = enummodule_native(pid, &module_count);
+    
+    if (modules == nullptr) {
+        printf("无法获取模块信息\n");
+        return 0;  // 或者返回一个特定的错误标记
+    }
+
+    uintptr_t base_address = 0;
+    for (size_t i = 0; i < module_count; ++i) {
+        if (strcmp(modules[i].modulename, module_name) == 0) {
+            base_address = modules[i].base;
+            break;
+        }
+    }
+
+    // 释放模块信息中的模块名称内存
+    for (size_t i = 0; i < module_count; ++i) {
+        free(modules[i].modulename);
+    }
+
+    // 释放分配的内存
+    free(modules);
+
+    return base_address;
+}
+
 //--------------------------------------------------
 #define TARGET_PROCESS_NAME "pvz"
 
@@ -743,13 +772,23 @@ extern "C" int c_main()
         return -1;
     }
     debug_log("模块数量: %zu\n", module_count);
-
+/*
     for (size_t i = 0; i < module_count; ++i) 
     {
         debug_log("模块名称: %s\n", modules[i].modulename);  // 直接打印 char *
         debug_log("基地址: 0x%lx\n", modules[i].base);
         debug_log("大小: %d bytes\n", modules[i].size);
         debug_log("64位: %s\n", modules[i].is_64bit ? "是" : "否");
+    }
+*/
+    // 查找模块基地址
+    const char *module_name = "pvz";
+    uintptr_t base_address = find_module_base(target_pid, module_name);
+    
+    if (base_address == 0) {
+        printf("未找到模块：%s\n", module_name);
+    } else {
+        printf("模块 %s 的基地址: 0x%lx\n", module_name, base_address);
     }
 
     // 释放分配的内存
