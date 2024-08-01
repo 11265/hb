@@ -31,18 +31,13 @@ typedef struct
     char *modulename;
 } ModuleInfo;
 
-extern "C" kern_return_t mach_vm_read_overwrite(vm_map_t, mach_vm_address_t, mach_vm_size_t,
-                                                mach_vm_address_t, mach_vm_size_t *);
+extern "C" kern_return_t mach_vm_read_overwrite(vm_map_t, mach_vm_address_t, mach_vm_size_t,mach_vm_address_t, mach_vm_size_t *);
 
-extern "C" kern_return_t mach_vm_write(vm_map_t, mach_vm_address_t, vm_offset_t,
-                                       mach_msg_type_number_t);
+extern "C" kern_return_t mach_vm_write(vm_map_t, mach_vm_address_t, vm_offset_t,mach_msg_type_number_t);
 
-extern "C" kern_return_t mach_vm_protect(vm_map_t, mach_vm_address_t, mach_vm_size_t, boolean_t,
-                                         vm_prot_t);
+extern "C" kern_return_t mach_vm_protect(vm_map_t, mach_vm_address_t, mach_vm_size_t, boolean_t,vm_prot_t);
 
-extern "C" kern_return_t mach_vm_region(vm_map_t, mach_vm_address_t *, mach_vm_size_t *,
-                                        vm_region_flavor_t, vm_region_info_t,
-                                        mach_msg_type_number_t *, mach_port_t *);
+extern "C" kern_return_t mach_vm_region(vm_map_t, mach_vm_address_t *, mach_vm_size_t *,vm_region_flavor_t, vm_region_info_t,mach_msg_type_number_t *, mach_port_t *);
 
 typedef int (*PROC_REGIONFILENAME)(int pid, uint64_t address, void *buffer, uint32_t buffersize);
 PROC_REGIONFILENAME proc_regionfilename = nullptr;
