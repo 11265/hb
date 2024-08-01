@@ -806,7 +806,7 @@ extern "C" int c_main()
         free(modules);
         return -1;
     }
-    debug_log("第一级指针: 0x%lx\n", first_pointer);
+    debug_log("第一级指针: %zu\n", first_pointer);
 
     // 读取第二级指针
     uintptr_t second_pointer;
@@ -816,7 +816,7 @@ extern "C" int c_main()
         free(modules);
         return -1;
     }
-    debug_log("第二级指针: 0x%zu\n", second_pointer);
+    debug_log("第二级指针: %zu\n", second_pointer);
 
 
     // 释放分配的内存
