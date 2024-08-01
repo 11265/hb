@@ -817,13 +817,13 @@ extern "C" int c_main()
     {
         ssize_t bytes_read = read_memory_native(target_pid, target_address, sizeof(int32_t), reinterpret_cast<unsigned char*>(&value));
         if (bytes_read == sizeof(int32_t)) {
-            printf("读取的i32值: %d\n", value);
+            debug_log("读i32值: %d\n", value);
         } else {
-            printf("读取内存失败或读取大小不匹配，读取字节数: %zd\n", bytes_read);
+            debug_log("读取内存失败或读取大小不匹配，读取字节数: %zd\n", bytes_read);
         }
         
-        // 每秒读取一次
-        sleep(60);
+        // 每秒读取60次，即每次读取后等待大约16.666毫秒
+        usleep(1000000 / 60);  // 16,666微秒
     }
 
     // 释放分配的内存
