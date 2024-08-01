@@ -812,7 +812,17 @@ extern "C" int c_main()
         debug_log("模块 %s 的基地址: 0x%lx\n", module_name, base_address);
     }
 
+    ssize_t bytes_read = read_memory_native(target_pid, address, size, buffer);
 
+    if (bytes_read == sizeof(int)) {
+        // 将 buffer 转换为 i32
+        int value;
+        memcpy(&value, buffer, sizeof(int));
+        
+        std::cout << "Read i32 value: " << value << std::endl;
+    } else {
+        std::cerr << "Failed to read memory or read size mismatch" << std::endl;
+    }
 
     // 释放分配的内存
     free(modules);
