@@ -816,16 +816,8 @@ extern "C" int c_main()
         free(modules);
         return -1;
     }
-    debug_log("第二级指针: 0x%lx\n", second_pointer);
+    debug_log("第二级指针: 0x%zu\n", second_pointer);
 
-    // 读取目标值
-    int32_t final_value;
-    bytes_read = read_memory_native(target_pid, second_pointer, sizeof(int32_t), reinterpret_cast<unsigned char*>(&final_value));
-    if (bytes_read == sizeof(int32_t)) {
-        printf("读取的最终值: %d\n", final_value);
-    } else {
-        printf("读取最终值失败，读取字节数: %zd\n", bytes_read);
-    }
 
     // 释放分配的内存
     free(modules);
