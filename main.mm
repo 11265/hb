@@ -823,6 +823,7 @@ extern "C" int c_main()
         debug_log("Read i32 value: %s\n" , value );
     } else {
         debug_log("Failed to read memory or read size mismatch");
+        }
 
     // 释放分配的内存
     free(modules);
