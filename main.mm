@@ -523,12 +523,14 @@ static std::uint64_t get_module_size(int pid, mach_vm_address_t address, bool *i
     return 0;
 }
 
+//用于获取指定进程的模块信息
 extern "C" ModuleInfo *enummodule_native(pid_t pid, size_t *count)
 {
     task_t task;
+    // 尝试获取指定进程的任务端口
     if (task_for_pid(mach_task_self(), pid, &task) != KERN_SUCCESS)
     {
-        debug_log("Error: Failed to get task for pid %d\n", pid);
+        debug_log("错误：获取 pid %d 的任务失败\n", pid);
         *count = 0;
         return nullptr;
     }
@@ -536,29 +538,31 @@ extern "C" ModuleInfo *enummodule_native(pid_t pid, size_t *count)
     task_dyld_info dyld_info;
     mach_msg_type_number_t count_info = TASK_DYLD_INFO_COUNT;
 
-    if (task_info(task, TASK_DYLD_INFO, reinterpret_cast<task_info_t>(&dyld_info), &count_info) !=
-        KERN_SUCCESS)
+    // 获取任务的动态库信息
+    if (task_info(task, TASK_DYLD_INFO, reinterpret_cast<task_info_t>(&dyld_info), &count_info) != KERN_SUCCESS)
     {
-        debug_log("Error: Failed to get task info\n");
+        debug_log("错误：获取任务信息失败\n");
         *count = 0;
         return nullptr;
     }
 
     dyld_all_image_infos all_image_infos;
+    // 读取所有图像信息
     if (read_memory_native(pid, dyld_info.all_image_info_addr, sizeof(dyld_all_image_infos),
                            reinterpret_cast<unsigned char *>(&all_image_infos)) <= 0)
     {
-        debug_log("Error: Failed to read all_image_infos\n");
+        debug_log("错误：读取 all_image_infos 失败\n");
         *count = 0;
         return nullptr;
     }
 
     std::vector<dyld_image_info> image_infos(all_image_infos.infoArrayCount);
+    // 读取图像信息数组
     if (read_memory_native(pid, reinterpret_cast<mach_vm_address_t>(all_image_infos.infoArray),
                            sizeof(dyld_image_info) * all_image_infos.infoArrayCount,
                            reinterpret_cast<unsigned char *>(image_infos.data())) <= 0)
     {
-        debug_log("Error: Failed to read image_infos\n");
+        debug_log("错误：读取 image_infos 失败\n");
         *count = 0;
         return nullptr;
     }
@@ -566,9 +570,11 @@ extern "C" ModuleInfo *enummodule_native(pid_t pid, size_t *count)
     std::vector<ModuleInfo> moduleList;
     moduleList.reserve(all_image_infos.infoArrayCount);
 
+    // 遍历所有图像信息
     for (const auto &info : image_infos)
     {
         char fpath[PATH_MAX];
+        // 读取模块文件路径
         if (read_memory_native(pid, reinterpret_cast<mach_vm_address_t>(info.imageFilePath),
                                PATH_MAX, reinterpret_cast<unsigned char *>(fpath)) > 0)
         {
@@ -576,6 +582,7 @@ extern "C" ModuleInfo *enummodule_native(pid_t pid, size_t *count)
             if (strlen(fpath) == 0 && proc_regionfilename != nullptr)
             {
                 char buffer[PATH_MAX];
+                // 如果路径为空，尝试获取区域文件名
                 int ret =
                     proc_regionfilename(pid, reinterpret_cast<std::uint64_t>(info.imageLoadAddress),
                                         buffer, sizeof(buffer));
@@ -595,11 +602,13 @@ extern "C" ModuleInfo *enummodule_native(pid_t pid, size_t *count)
     }
 
     *count = moduleList.size();
+    // 分配内存并复制模块信息到结果数组
     ModuleInfo *result = static_cast<ModuleInfo *>(malloc(*count * sizeof(ModuleInfo)));
     std::copy(moduleList.begin(), moduleList.end(), result);
 
     return result;
 }
+
 
 extern "C" int native_init()
 {
