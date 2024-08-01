@@ -761,8 +761,9 @@ extern "C" uintptr_t find_module_base(pid_t pid, const char *module_name) {
 }
 
 //--------------------------------------------------
-#define TARGET_PROCESS_NAME "pvz"
-
+#define TARGET_PROCESS_NAME "pvz"//进程名称
+    const char *module_name = "pvz";//模块名称
+//pvz+0x20A7AA0+0x400
 mach_vm_address_t 偏移1 = 0x20A7AA0; // 第一级偏移
 mach_vm_address_t 偏移2 = 0x400; // 第二级偏移
 
@@ -788,7 +789,7 @@ extern "C" int c_main()
     debug_log("模块数量: %zu\n", module_count);
 
     // 查找模块基地址
-    const char *module_name = "pvz";
+
     uintptr_t base_address = find_module_base(target_pid, module_name);
     if (base_address == 0) {
         debug_log("未找到模块：%s\n", module_name);
