@@ -629,7 +629,9 @@ extern "C" int native_init()
     return 1;
 }
 
-extern "C" int get_proc_list(kinfo_proc **procList, size_t *procCount) {
+// 获取进程列表
+extern "C" int get_proc_list(kinfo_proc **procList, size_t *procCount) 
+{
     int err;
     kinfo_proc *result = NULL;
     bool done = false;
@@ -675,7 +677,7 @@ extern "C" int get_proc_list(kinfo_proc **procList, size_t *procCount) {
     return err;
 }
 
-
+// 根据进程名获取PID
 extern "C"  pid_t get_pid_by_name(const char *process_name) 
 {
     kinfo_proc *procList = NULL;
