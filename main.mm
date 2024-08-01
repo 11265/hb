@@ -761,9 +761,11 @@ extern "C" uintptr_t find_module_base(pid_t pid, const char *module_name) {
 }
 
 //--------------------------------------------------
-#define TARGET_PROCESS_NAME "pvz"//进程名称
-    const char *module_name = "pvz";//模块名称
 //pvz+0x20A7AA0+0x400
+
+#define TARGET_PROCESS_NAME "pvz"//进程名称
+const char *module_name = "pvz";//模块名称
+
 mach_vm_address_t 偏移1 = 0x20A7AA0; // 第一级偏移
 mach_vm_address_t 偏移2 = 0x400; // 第二级偏移
 
