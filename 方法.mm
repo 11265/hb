@@ -124,3 +124,16 @@ extern "C" int c_main()
     return 0;
 }
 //--------------------------------------------
+
+    // 遍历进程模块
+    size_t module_count;
+    ModuleInfo *modules = enummodule_native(target_pid, &module_count);
+    if (modules == nullptr) 
+    {
+        debug_log("无法获取模块信息\n");
+        return -1;
+    }
+    debug_log("模块数量: %zu\n", module_count);
+
+//----------------------------------------------
+
