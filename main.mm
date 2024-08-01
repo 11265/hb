@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 #include <stdbool.h>  // 添加这行
+#include <strings.h>
 
 // 其他必要的头文件
 typedef struct
