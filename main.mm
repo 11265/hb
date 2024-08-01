@@ -811,6 +811,5 @@ extern "C" int c_main()
 
 
     debug_log("运行结束.\n");
-
     return 0;
 }
