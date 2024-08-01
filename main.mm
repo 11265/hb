@@ -796,7 +796,7 @@ extern "C" int c_main()
         free(modules);
         return -1;
     }
-    debug_log("模块 %s 的基地址: 0x%lx\n", module_name, base_address);
+    debug_log("模块名称: %s 的基地址: 0x%lx\n", module_name, base_address);
 
     // 读取第一级指针
     uintptr_t first_pointer;
