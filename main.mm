@@ -77,7 +77,7 @@ extern "C" ssize_t read_memory_native(int pid, mach_vm_address_t address, mach_v
         kr = task_for_pid(mach_task_self(), pid, &task);
         if (kr != KERN_SUCCESS)
         {
-            debug_log("Error: task_for_pid failed with error %d (%s)\n", kr, mach_error_string(kr));
+            debug_log("错误：task_for_pid 失败并出现错误 %d (%s)\n", kr, mach_error_string(kr));
             return -1;
         }
     }
@@ -86,7 +86,7 @@ extern "C" ssize_t read_memory_native(int pid, mach_vm_address_t address, mach_v
     kr = mach_vm_read_overwrite(task, address, size, (mach_vm_address_t)buffer, &out_size);
     if (kr != KERN_SUCCESS)
     {
-        debug_log("Error: mach_vm_read_overwrite failed with error %d (%s)\n", kr,
+        debug_log("错误：mach_vm_read_overwrite 失败，出现错误 %d (%s)\n", kr,
                   mach_error_string(kr));
         return -1;
     }
@@ -114,7 +114,7 @@ extern "C" ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_
         err = task_for_pid(mach_task_self(), pid, &task);
         if (err != KERN_SUCCESS)
         {
-            debug_log("Error: task_for_pid failed with error %d (%s)\n", err,
+            debug_log("错误：task_for_pid 失败并出现错误 %d (%s)\n", err,
                       mach_error_string(err));
             return -1;
         }
@@ -132,7 +132,7 @@ extern "C" ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_
                          (vm_region_info_t)&info, &info_count, &object_name);
     if (err != KERN_SUCCESS)
     {
-        debug_log("Error: mach_vm_region failed with error %d (%s) at address "
+        debug_log("错误：mach_vm_region 失败并出现错误 %d (%s) at address "
                   "0x%llx, size 0x%llx\n",
                   err, mach_error_string(err), address, size);
         if (!is_embedded_mode)
@@ -147,7 +147,7 @@ extern "C" ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_
     err = mach_vm_protect(task, address, size, false, VM_PROT_READ | VM_PROT_WRITE);
     if (err != KERN_SUCCESS)
     {
-        debug_log("Error: mach_vm_protect (write enable) failed with error %d (%s)\n", err,
+        debug_log("错误：mach_vm_protect（写入启用）失败并出现错误 %d (%s)\n", err,
                   mach_error_string(err));
         if (!is_embedded_mode)
         {
@@ -763,7 +763,7 @@ extern "C" uintptr_t find_module_base(pid_t pid, const char *module_name) {
 //--------------------------------------------------
 #define TARGET_PROCESS_NAME "pvz"
     //pid_t target_pid = 12345;  // 替换为实际的目标进程 ID
-    mach_vm_address_t address = 0x1000;  // 替换为实际的内存地址
+    mach_vm_address_t address = 0x1060E1388;  // 替换为实际的内存地址
     mach_vm_size_t size = sizeof(int);  // 要读取的字节数（对于 i32 类型）
     unsigned char buffer[sizeof(int)];  // 确保缓冲区足够大以存储读取的数据
 
@@ -820,9 +820,9 @@ extern "C" int c_main()
         int value;
         memcpy(&value, buffer, sizeof(int));
         
-        debug_log("Read i32 value: %s\n" , value );
+        debug_log("读取i32值: %s\n" , value );
     } else {
-        debug_log("Failed to read memory or read size mismatch");
+        debug_log("读取内存失败或读取大小不匹配");
         }
 
     // 释放分配的内存
