@@ -746,7 +746,7 @@ extern "C" int c_main()
 
     for (size_t i = 0; i < module_count; ++i) 
     {
-        debug_log("模块名称: %s\n", modules[i].modulename.c_str());
+        debug_log("模块名称: %s\n", modules[i].modulename);  // 直接打印 char *
         debug_log("基地址: 0x%lx\n", modules[i].base);
         debug_log("大小: %d bytes\n", modules[i].size);
         debug_log("64位: %s\n", modules[i].is_64bit ? "是" : "否");
@@ -755,6 +755,6 @@ extern "C" int c_main()
     // 释放分配的内存
     free(modules);
     debug_log("运行结束.\n");
-    
+
     return 0;
 }
