@@ -796,7 +796,7 @@ extern "C" int c_main()
     ssize_t bytes_read = read_memory_native(target_pid, base_address + 偏移1, sizeof(uintptr_t), reinterpret_cast<unsigned char*>(&first_pointer));
     if (bytes_read != sizeof(uintptr_t)) {
         debug_log("读取第一级指针失败，读取字节数: %zd\n", bytes_read);
-        free(modules);
+        //free(modules);
         return -1;
     }
     debug_log("第一级指针: %zu\n", first_pointer);
@@ -806,14 +806,14 @@ extern "C" int c_main()
     bytes_read = read_memory_native(target_pid, first_pointer + 偏移2, sizeof(uintptr_t), reinterpret_cast<unsigned char*>(&second_pointer));
     if (bytes_read != sizeof(uintptr_t)) {
         debug_log("读取第二级指针失败，读取字节数: %zd\n", bytes_read);
-        free(modules);
+        //free(modules);
         return -1;
     }
     debug_log("第二级指针: %zu\n", second_pointer);
 
 
     // 释放分配的内存
-    free(modules);
+    //free(modules);
     debug_log("运行结束.\n");
 
     return 0;
