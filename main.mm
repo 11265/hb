@@ -17,6 +17,7 @@
 #include <vector>
 #include <stdbool.h>  // 添加这行
 #include <strings.h>
+#include <cctype>  // 包含 std::tolower
 
 // 其他必要的头文件
 typedef struct
@@ -723,12 +724,12 @@ extern "C"  pid_t get_pid_by_name(const char *process_name)
 }
 
 // 不区分大小写的字符串比较
-extern "C"  bool strcasecmp(const char *s1, const char *s2) {
-    while (*s1 && *s2 && std::tolower(*s1) == std::tolower(*s2)) {
+extern "C" bool strcasecmp(const char *s1, const char *s2) {
+    while (*s1 && *s2 && std::tolower(static_cast<unsigned char>(*s1)) == std::tolower(static_cast<unsigned char>(*s2))) {
         ++s1;
         ++s2;
     }
-    return std::tolower(*s1) == std::tolower(*s2);
+    return (std::tolower(static_cast<unsigned char>(*s1)) == std::tolower(static_cast<unsigned char>(*s2)));
 }
 // 查找指定模块名称的函数
 extern "C"  uintptr_t find_module_base(pid_t pid, const char *module_name) {
