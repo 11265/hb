@@ -762,6 +762,10 @@ extern "C" uintptr_t find_module_base(pid_t pid, const char *module_name) {
 
 //--------------------------------------------------
 #define TARGET_PROCESS_NAME "pvz"
+    //pid_t target_pid = 12345;  // 替换为实际的目标进程 ID
+    mach_vm_address_t address = 0x1000;  // 替换为实际的内存地址
+    mach_vm_size_t size = sizeof(int);  // 要读取的字节数（对于 i32 类型）
+    unsigned char buffer[sizeof(int)];  // 确保缓冲区足够大以存储读取的数据
 
 extern "C" int c_main() 
 {
@@ -791,12 +795,13 @@ extern "C" int c_main()
         debug_log("64位: %s\n", modules[i].is_64bit ? "是" : "否");
     }
 */
+/*
     // 打印所有模块名称以进行调试
     for (size_t i = 0; i < module_count; ++i) 
     {
         debug_log("模块名称: %s\n", modules[i].modulename);
     }
-
+*/
     // 查找模块基地址
     const char *module_name = "pvz";
     uintptr_t base_address = find_module_base(target_pid, module_name);
@@ -806,6 +811,8 @@ extern "C" int c_main()
     } else {
         debug_log("模块 %s 的基地址: 0x%lx\n", module_name, base_address);
     }
+
+
 
     // 释放分配的内存
     free(modules);
