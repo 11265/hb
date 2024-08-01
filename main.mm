@@ -798,7 +798,6 @@ extern "C" int c_main()
         free(modules);
         return -1;
     }
-    //debug_log("模块名称: %s 的基地址: 0x%lx\n", module_name, base_address);
     debug_log("模块名称: %s\n", module_name);
     debug_log("模块基址: 0x%zd\n", base_address);
 
