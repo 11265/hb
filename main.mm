@@ -826,7 +826,18 @@ extern "C" int c_main()
         usleep(1000000 / 60);  // 16,666微秒
     }
 */
+    //跨进程读取内存
+    int32_t value;
 
+    ssize_t bytes_read = read_memory_native(target_pid, target_address, sizeof(int32_t), reinterpret_cast<unsigned char*>(&value));
+    if (bytes_read == sizeof(int32_t)) {
+            debug_log("读i32值: %d\n", value);
+    } else {
+            debug_log("读取内存失败或读取大小不匹配，读取字节数: %zd\n", bytes_read);
+    }
+
+//--------------------------------------------
+/*
     // 要写入的数据
     int32_t new_value = 42;
     unsigned char *buffer = reinterpret_cast<unsigned char*>(&new_value);
@@ -838,7 +849,8 @@ extern "C" int c_main()
     } else {
         debug_log("写入内存失败，写入字节数: %zd\n", bytes_written);
     }
-
+*/
+//--------------------------------------------------
     // 释放分配的内存
     free(modules);
     debug_log("运行结束.\n");
