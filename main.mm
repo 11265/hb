@@ -779,16 +779,6 @@ extern "C" int c_main()
         return -1;
     }
     debug_log("找到进程: %s，PID: %d\n", TARGET_PROCESS_NAME, target_pid);
-    
-    // 遍历进程模块
-    size_t module_count;
-    ModuleInfo *modules = enummodule_native(target_pid, &module_count);
-    if (modules == nullptr) 
-    {
-        debug_log("无法获取模块信息\n");
-        return -1;
-    }
-    debug_log("模块数量: %zu\n", module_count);
 
     // 查找模块基地址
 
