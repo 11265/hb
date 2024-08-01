@@ -764,7 +764,6 @@ extern "C" uintptr_t find_module_base(pid_t pid, const char *module_name) {
 #define TARGET_PROCESS_NAME "pvz"
     //pid_t target_pid = 12345;  // 替换为实际的目标进程 ID
 mach_vm_address_t target_address = 0x1060E1388; // 替换为实际的内存地址
-int32_t value;
 
 extern "C" int c_main() 
 {
@@ -810,7 +809,8 @@ extern "C" int c_main()
     } else {
         debug_log("模块 %s 的基地址: 0x%lx\n", module_name, base_address);
     }
-
+    
+    int32_t value;
     while (true) 
     {
         ssize_t bytes_read = read_memory_native(target_pid, target_address, sizeof(int32_t), reinterpret_cast<unsigned char*>(&value));
