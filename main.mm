@@ -38,11 +38,13 @@ extern "C" int c_main(int argc, char* argv[])
     std::cout << "模糊搜索耗时: " << result.time_used << " 毫秒, 内存使用: " << result.memory_used << " 字节" << std::endl;
 
     // 搜索特定值
-    int search_value = 100;
-    std::cout << "开始搜索值 " << search_value << " ..." << std::endl;
-    result = scanner.search(&search_value, rx_compare_type_eq);
-    std::cout << "搜索值 100 的结果: " << result.matched << " 个匹配" << std::endl;
-    std::cout << "精确搜索耗时: " << result.time_used << " 毫秒, 内存使用: " << result.memory_used << " 字节" << std::endl;
+    std::vector<int> search_values = {100, 0x64, 0x64000000, 0x100, 0x1000000};
+    for (int search_value : search_values) {
+        std::cout << "开始搜索值 " << search_value << " (0x" << std::hex << search_value << std::dec << ") ..." << std::endl;
+        result = scanner.search(&search_value, rx_compare_type_eq);
+        std::cout << "搜索值 " << search_value << " 的结果: " << result.matched << " 个匹配" << std::endl;
+        std::cout << "精确搜索耗时: " << result.time_used << " 毫秒, 内存使用: " << result.memory_used << " 字节" << std::endl;
+    }
 
 
     std::cout << "扫描程序运行结束." << std::endl;
