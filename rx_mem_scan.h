@@ -112,6 +112,23 @@ public:
 template <typename T>
 class rx_comparator_typed_eq : public rx_comparator {
 public:
+    boolean_t compare(void *a, void *b) override {
+        T value_a = *(T *)a;
+        T value_b = *(T *)b;
+        std::cout << "比较: " << value_a << " 和 " << value_b << std::endl;
+        return value_a == value_b;
+    }
+};
+
+class rx_comparator {
+public:
+    virtual ~rx_comparator() {}
+    virtual boolean_t compare(void *a, void *b) = 0;
+};
+
+template <typename T>
+class rx_comparator_typed_eq : public rx_comparator {
+public:
     boolean_t compare(void *a, void *b) override { return *(T *)b == *(T *)a; }
 };
 
