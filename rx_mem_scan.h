@@ -49,7 +49,7 @@ typedef std::vector<region_t>       regions_t;
 typedef regions_t *                 regions_pt;
 
 typedef std::vector<vm_address_t>   address_list_t;
-typedef address_list_pt *           address_list_pt;
+typedef address_list_t * address_list_pt;
 typedef void *                      search_val_pt;
 typedef uint8_t                     data_t;
 typedef uint8_t *                   data_pt;
