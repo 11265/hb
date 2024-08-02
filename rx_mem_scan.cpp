@@ -229,11 +229,15 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
     for (uint32_t i = 0; i < _regions_p->size(); ++i) {
         region_t region = (*_regions_p)[i];
         if (!region.writable) {
-            debug_log("跳过只读区域: 0x%llx - 0x%llx", region.address, region.address + region.size);
+            std::cout << "跳过只读区域: 0x" << std::hex << region.address << " - 0x" 
+            << (region.address + region.size) << std::dec << std::endl;
             continue;
         }
 
-        debug_log("搜索区域: 0x%llx - 0x%llx, 大小: %llu 字节", region.address, region.address + region.size, region.size);
+            std::cout << "搜索区域: 0x" << std::hex << region.address << " - 0x" 
+            << (region.address + region.size) << ", 大小: " << std::dec 
+            << region.size << " 字节" << std::endl;
+
 
         size_t size_of_value = _search_value_type_p->size_of_value();
         size_t data_count = region.size / size_of_value;
@@ -243,19 +247,20 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
         kern_return_t ret = read_region(region_data_p, region, &raw_data_read_count);
 
         if (ret != KERN_SUCCESS) {
-            debug_log("读取区域失败: 0x%llx - 0x%llx, 错误码: %d", region.address, region.address + region.size, ret);
+           std::cout << "读取区域失败: 0x" << std::hex << region.address << " - 0x" 
+                      << (region.address + region.size) << ", 错误码: " << std::dec 
+                      << ret << std::endl;
             continue;
         }
-                // 添加简单的内存dump
+        // 添加简单的内存dump
         if (i == 0) {  // 只dump第一个区域的前100字节
-            debug_log("内存内容示例 (前100字节):");
+            std::cout << "内存内容示例 (前100字节):" << std::endl;
             for (int j = 0; j < 100 && j < region.size; j += 16) {
-                debug_log("%016llx: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
-                        region.address + j,
-                        region_data_p[j], region_data_p[j+1], region_data_p[j+2], region_data_p[j+3],
-                        region_data_p[j+4], region_data_p[j+5], region_data_p[j+6], region_data_p[j+7],
-                        region_data_p[j+8], region_data_p[j+9], region_data_p[j+10], region_data_p[j+11],
-                        region_data_p[j+12], region_data_p[j+13], region_data_p[j+14], region_data_p[j+15]);
+                std::cout << std::hex << std::setfill('0') << std::setw(16) << (region.address + j) << ": ";
+                for (int k = 0; k < 16 && (j + k) < region.size; ++k) {
+                    std::cout << std::setw(2) << static_cast<int>(region_data_p[j+k]) << " ";
+                }
+                std::cout << std::dec << std::endl;
             }
         }
 
