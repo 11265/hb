@@ -21,7 +21,7 @@ jobs:
         SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
         echo "SDKROOT=$SDKROOT" >> $GITHUB_ENV
 
-    - name: List directory contents
+    - name: List directory contents before build
       run: ls -la
 
     - name: Compile project
@@ -30,10 +30,29 @@ jobs:
         xcrun -sdk iphoneos clang -c main.s -o main_asm.o -arch arm64 -mios-version-min=14.0 -isysroot $SDKROOT
         xcrun -sdk iphoneos clang++ -c rx_mem_scan.cpp -o rx_mem_scan.o -arch arm64 -mios-version-min=14.0 -std=c++17 -isysroot $SDKROOT -I. -I$(xcrun --sdk iphoneos --show-sdk-path)/usr/include
         xcrun -sdk iphoneos clang -c lz4/lz4.c -o lz4.o -arch arm64 -mios-version-min=14.0 -isysroot $SDKROOT -I. -I$(xcrun --sdk iphoneos --show-sdk-path)/usr/include
-        xcrun -sdk iphoneos clang++ main.o main_asm.o rx_mem_scan.o lz4.o -o main -arch arm64 -mios-version-min=14.0 -isysroot $SDKROOT -framework Foundation -framework CoreFoundation -std=c++17
+        xcrun -sdk iphoneos clang++ main.o main_asm.o rx_mem_scan.o lz4.o -o memscanner -arch arm64 -mios-version-min=14.0 -isysroot $SDKROOT -framework Foundation -framework CoreFoundation -std=c++17
+
+    - name: List directory contents after build
+      run: ls -la
+
+    - name: Check if binary exists
+      run: |
+        if [ -f memscanner ]; then
+          echo "Binary file 'memscanner' exists"
+        else
+          echo "Binary file 'memscanner' does not exist"
+          exit 1
+        fi
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
         name: ios-arm64-binary
-        path: main
+        path: memscanner
+
+    - name: Upload build directory (if binary not found)
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: build-directory
+        path: .
