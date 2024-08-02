@@ -48,7 +48,7 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: ios-arm64-binary
-        path: memscanner
+        path: main
 
     - name: Upload build directory (if binary not found)
       if: failure()
