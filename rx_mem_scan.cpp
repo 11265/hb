@@ -4,7 +4,7 @@
 //
 
 #include "rx_mem_scan.h"
-#include "lz4.h"
+#include "lz4/lz4.h"
 
 static long get_timestamp() {
     struct timeval tv;
