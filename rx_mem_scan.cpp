@@ -4,6 +4,9 @@
 // 在文件开头添加
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
+#include <cstring>
+#include <cctype>
 
 static long get_timestamp() {
     struct timeval tv;
