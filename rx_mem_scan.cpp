@@ -1,5 +1,5 @@
 #include "rx_mem_scan.h"
-#include "lz4/lib/lz4.h"
+#include "lz4/lz4.h"
 #include <sys/time.h>
 
 static long get_timestamp() {
@@ -263,7 +263,8 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
                 if (_unknown_last_search_val) {
                     old_region_data_p = new data_t[region.size];
                     // int result =
-                    LZ4_decompress_fast((const char *) region.compressed_region_data, (char *) old_region_data_p, region.size);
+                    //LZ4_decompress_fast((const char *) region.compressed_region_data, (char *) old_region_data_p, region.size);
+                    LZ4_decompress_safe((const char *) region.compressed_region_data, (char *) old_region_data_p, region.compressed_region_data_size, region.size);
                     // TODO process result
                 }
 
