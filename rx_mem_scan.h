@@ -250,6 +250,21 @@ private:
     void handle_memory_access_error(vm_address_t address);
     void log(const std::string& message);
 
+    search_result_t wait_for_search_result();
+    void smart_filter_regions();
+    template<typename T>
+    bool binary_search_region(const region_t& region, T value);
+    void performance_analysis();
+    template<typename Func>
+    void safe_execute(Func func);
+    search_result_t safe_search(search_val_pt search_val_p, rx_compare_type ct);
+    template<typename Func>
+    auto retry_operation(Func func, int max_retries = 3) -> decltype(func());
+    void optimize_memory_usage();
+    search_result_t optimized_search(search_val_pt search_val_p, rx_compare_type ct);
+    search_result_t quick_search(search_val_pt search_val_p, rx_compare_type ct);
+    void visualize_results();
+
 private:
     pid_t                       _target_pid;
     mach_port_t                 _target_task;
