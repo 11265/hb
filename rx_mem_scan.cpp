@@ -229,15 +229,10 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
     for (uint32_t i = 0; i < _regions_p->size(); ++i) {
         region_t region = (*_regions_p)[i];
         if (!region.writable) {
-            std::cout << "跳过只读区域: 0x" << std::hex << region.address << " - 0x" 
-            << (region.address + region.size) << std::dec << std::endl;
             continue;
         }
 
-            std::cout << "搜索区域: 0x" << std::hex << region.address << " - 0x" 
-            << (region.address + region.size) << ", 大小: " << std::dec 
-            << region.size << " 字节" << std::endl;
-
+        std::cout << "搜索区域: 0x" << std::hex << region.address << " - 0x" << (region.address + region.size) << std::dec << std::endl;
 
         size_t size_of_value = _search_value_type_p->size_of_value();
         size_t data_count = region.size / size_of_value;
@@ -246,23 +241,11 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
         data_pt region_data_p = new data_t[region.size];
         kern_return_t ret = read_region(region_data_p, region, &raw_data_read_count);
 
-        if (ret != KERN_SUCCESS) {
-           std::cout << "读取区域失败: 0x" << std::hex << region.address << " - 0x" 
-                      << (region.address + region.size) << ", 错误码: " << std::dec 
-                      << ret << std::endl;
-            continue;
-        }
-        // 添加简单的内存dump
-        if (i == 0) {  // 只dump第一个区域的前100字节
-            std::cout << "内存内容示例 (前100字节):" << std::endl;
-            for (int j = 0; j < 100 && j < region.size; j += 16) {
-                std::cout << std::hex << std::setfill('0') << std::setw(16) << (region.address + j) << ": ";
-                for (int k = 0; k < 16 && (j + k) < region.size; ++k) {
-                    std::cout << std::setw(2) << static_cast<int>(region_data_p[j+k]) << " ";
-                }
-                std::cout << std::dec << std::endl;
+        if (ret == KERN_SUCCESS) {
+            // 添加内存dump
+            if (i == 0) {  // 只dump第一个区域的前100字节作为示例
+                dump_memory(region.address, std::min(region.size, (vm_size_t)100));
             }
-        }
 
             matched_offs_pt matched_offs_p = new matched_offs_t;
 
