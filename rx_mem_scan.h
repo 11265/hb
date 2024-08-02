@@ -7,6 +7,13 @@
 #include <vector>
 #include <mach/vm_region.h>
 #include <iostream>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
+#include <queue>
+#include <functional>
+#include <map>
 
 #ifdef RXDEBUG
 #   define _trace(s,...) (printf(s, __VA_ARGS__))
@@ -42,25 +49,17 @@ typedef std::vector<region_t>       regions_t;
 typedef regions_t *                 regions_pt;
 
 typedef std::vector<vm_address_t>   address_list_t;
-typedef address_list_t *            address_list_pt;
+typedef address_list_pt *           address_list_pt;
 typedef void *                      search_val_pt;
 typedef uint8_t                     data_t;
 typedef uint8_t *                   data_pt;
 
 class rx_memory_page {
 public:
-    rx_memory_page() {
-        addresses = NULL;
-        data = NULL;
-        data_size = 0;
-    }
+    rx_memory_page() : addresses(nullptr), data(nullptr), data_size(0) {}
     ~rx_memory_page() {
-        if (addresses) {
-            delete addresses;
-        }
-        if (data) {
-            delete[] data;
-        }
+        delete addresses;
+        delete[] data;
     }
 
 public:
@@ -73,11 +72,8 @@ typedef rx_memory_page_t *          rx_memory_page_pt;
 
 class rx_region {
 public:
-    rx_region() {
-        compressed_region_data = NULL;
-        matched_offs = NULL;
-        compressed_region_data_size = 0;
-    }
+    rx_region() : compressed_region_data(nullptr), matched_offs(nullptr), 
+                  compressed_region_data_size(0), matched_count(0) {}
 
     vm_address_t address;
     vm_size_t size;
@@ -174,6 +170,31 @@ public:
 
 #define rx_in_range(v, b, e)        ((v)>=(b) && (v)<(e))
 
+struct SearchRange {
+    int min;
+    int max;
+};
+
+struct FuzzySearch {
+    int value;
+    int tolerance;
+};
+
+struct MultiValueSearch {
+    std::vector<int> values;
+};
+
+struct SearchTask {
+    enum class Type { Exact, Range, Fuzzy, MultiValue };
+    Type type;
+    union {
+        int exact_value;
+        SearchRange range;
+        FuzzySearch fuzzy;
+        MultiValueSearch* multi_value;
+    };
+};
+
 class rx_mem_scan {
 public:
     rx_mem_scan();
@@ -195,15 +216,40 @@ public:
     void dump_memory(vm_address_t address, size_t size);
     pid_t target_pid();
     mach_port_t target_task();
+
+    search_result_t range_search(int min, int max);
+    search_result_t fuzzy_search(int value, int tolerance);
+    search_result_t multi_value_search(const std::vector<int>& values);
+    search_result_t incremental_search(search_val_pt search_val_p, rx_compare_type ct);
+    void set_search_regions(const std::vector<std::pair<vm_address_t, vm_size_t>>& regions);
+    void set_result_callback(std::function<void(vm_address_t, int)> callback);
+    void pause_search();
+    void resume_search();
+    float get_search_progress() const;
+    std::vector<uint8_t> view_memory(vm_address_t address, size_t size);
+    bool edit_memory(vm_address_t address, const std::vector<uint8_t>& data);
+
 private:
     matched_off_t offset_of_matched_offsets(matched_offs_t &vec, uint32_t off_idx);
-    inline void free_region_memory(region_t &region);
-    inline void matched_offs_flush(matched_offs_context_t &ctx, matched_offs_t &vec);
-    inline void add_matched_offs_multi(matched_offs_t &vec, matched_off_t bi, matched_off_ct ic);
-    inline void add_matched_off(matched_off_t matched_idx, matched_offs_context_t &ctx, matched_offs_t &vec);
-    inline kern_return_t read_region(data_pt region_data, region_t &region, vm_size_t *read_count);
+    void free_region_memory(region_t &region);
+    void matched_offs_flush(matched_offs_context_t &ctx, matched_offs_t &vec);
+    void add_matched_offs_multi(matched_offs_t &vec, matched_off_t bi, matched_off_ct ic);
+    void add_matched_off(matched_off_t matched_idx, matched_offs_context_t &ctx, matched_offs_t &vec);
+    kern_return_t read_region(data_pt region_data, region_t &region, vm_size_t *read_count);
     void init_regions();
     void free_regions();
+
+    void thread_search_task();
+    void start_search_threads();
+    void stop_search_threads();
+    void cache_memory_region(const region_t& region);
+    data_pt get_cached_data(vm_address_t address, size_t size);
+    void compress_results();
+    void decompress_results();
+    void detect_patterns();
+    void handle_memory_access_error(vm_address_t address);
+    void log(const std::string& message);
+
 private:
     pid_t                       _target_pid;
     mach_port_t                 _target_task;
@@ -213,6 +259,16 @@ private:
     boolean_t                   _unknown_last_search_val;
     boolean_t                   _idle;
     rx_search_value_type *      _search_value_type_p;
+
+    std::vector<std::thread> _search_threads;
+    std::mutex _search_mutex;
+    std::condition_variable _search_cv;
+    std::atomic<bool> _stop_search;
+    std::atomic<bool> _pause_search;
+    std::queue<SearchTask> _search_tasks;
+    std::function<void(vm_address_t, int)> _result_callback;
+    std::atomic<float> _search_progress;
+    std::map<vm_address_t, std::vector<uint8_t>> _memory_cache;
 };
 
 typedef rx_search_typed_value_type<int> rx_search_int_type;
