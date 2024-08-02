@@ -1,18 +1,10 @@
-//
-// Created by rainyx on 16/8/26.
-// Copyright (c) 2016 rainyx. All rights reserved.
-//
-
 #ifndef RXMEMSCAN_RX_MEM_SCAN_MINI_H
 #define RXMEMSCAN_RX_MEM_SCAN_MINI_H
 
 #include <mach/mach.h>
-#include "libproc.h"
 #include <memory>
 #include <string>
 #include <vector>
-
-// #define RXDEBUG
 
 #ifdef RXDEBUG
 #   define _trace(s,...) (printf(s, __VA_ARGS__))
@@ -109,7 +101,6 @@ typedef enum {
     rx_compare_type_gt
 } rx_compare_type;
 
-
 class rx_comparator {
 public:
     virtual ~rx_comparator() {}
@@ -118,22 +109,26 @@ public:
 
 template <typename T>
 class rx_comparator_typed_eq : public rx_comparator {
-    boolean_t compare(void *a, void *b) { return *(T *)b == *(T *)a; }
+public:
+    boolean_t compare(void *a, void *b) override { return *(T *)b == *(T *)a; }
 };
 
 template <typename T>
 class rx_comparator_typed_ne : public rx_comparator {
-    boolean_t compare(void *a, void *b) { return *(T *)b != *(T *)a; }
+public:
+    boolean_t compare(void *a, void *b) override { return *(T *)b != *(T *)a; }
 };
 
 template <typename T>
 class rx_comparator_typed_lt : public rx_comparator {
-    boolean_t compare(void *a, void *b) { return *(T *)b < *(T *)a; }
+public:
+    boolean_t compare(void *a, void *b) override { return *(T *)b < *(T *)a; }
 };
 
 template <typename T>
 class rx_comparator_typed_gt : public rx_comparator {
-    boolean_t compare(void *a, void *b) { return *(T *)b > *(T *)a; }
+public:
+    boolean_t compare(void *a, void *b) override { return *(T *)b > *(T *)a; }
 };
 
 class rx_search_value_type {
@@ -145,14 +140,15 @@ public:
 
 template <typename T>
 class rx_search_typed_value_type : public rx_search_value_type {
-    size_t size_of_value() { return sizeof(T); }
-    rx_comparator *create_comparator(rx_compare_type ct) {
+public:
+    size_t size_of_value() override { return sizeof(T); }
+    rx_comparator *create_comparator(rx_compare_type ct) override {
         switch (ct) {
             case rx_compare_type_eq: return new rx_comparator_typed_eq<T>();
             case rx_compare_type_ne: return new rx_comparator_typed_ne<T>();
             case rx_compare_type_lt: return new rx_comparator_typed_lt<T>();
             case rx_compare_type_gt: return new rx_comparator_typed_gt<T>();
-            default: return NULL;
+            default: return nullptr;
         }
     }
 };
@@ -210,5 +206,9 @@ private:
     boolean_t                   _idle;
     rx_search_value_type *      _search_value_type_p;
 };
+
+typedef rx_search_typed_value_type<int> rx_search_int_type;
+typedef rx_search_typed_value_type<float> rx_search_float_type;
+typedef rx_search_typed_value_type<double> rx_search_double_type;
 
 #endif //RXMEMSCAN_RX_MEM_SCAN_MINI_H
