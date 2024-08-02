@@ -235,6 +235,10 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
             continue;
         }
 
+        std::cout << "搜索区域: 0x" << std::hex << region.address 
+                  << " - 0x" << (region.address + region.size) 
+                  << " 大小: " << std::dec << region.size << " 字节" << std::endl;
+
         size_t size_of_value = _search_value_type_p->size_of_value();
         size_t data_count = region.size / size_of_value;
 
@@ -263,6 +267,8 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
                     data_pt end_p = (region_data_p + region.size);
                     while (data_itor_p < end_p) {
                         int current_value = *(int*)data_itor_p;
+                        std::cout << "当前值: " << current_value << " 在地址: 0x" 
+                                  << std::hex << (region.address + idx) << std::endl;
                         if (comparator->compare(search_val_p, data_itor_p)) {
                             std::cout << "找到匹配: 地址 0x" << std::hex << (region.address + idx) 
                                       << " 值: " << std::dec << current_value << std::endl;
