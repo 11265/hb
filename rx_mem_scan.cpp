@@ -1,6 +1,9 @@
 #include "rx_mem_scan.h"
 #include "lz4/lz4.h"
 #include <sys/time.h>
+// 在文件开头添加
+#include <iostream>
+#include <iomanip>
 
 static long get_timestamp() {
     struct timeval tv;
@@ -201,11 +204,13 @@ void rx_mem_scan::set_last_search_val(search_val_pt new_p) {
 }
 
 search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type ct) {
-    search_result_t     result              = { 0 };
-    long                begin_time          = get_timestamp();
-    bool                is_fuzzy_search     = rx_is_fuzzy_search_val(search_val_p);
-    regions_pt          used_regions        = new regions_t();
-    rx_comparator *     comparator          = _search_value_type_p->create_comparator(ct);
+    search_result_t result = { 0 };
+    long begin_time = get_timestamp();
+    bool is_fuzzy_search = rx_is_fuzzy_search_val(search_val_p);
+    regions_pt used_regions = new regions_t();
+    rx_comparator* comparator = _search_value_type_p->create_comparator(ct);
+
+    std::cout << "开始搜索, 类型: " << (is_fuzzy_search ? "模糊搜索" : "精确搜索") << std::endl;
 
     if (is_fuzzy_search) {
         if (_idle) {
@@ -224,6 +229,8 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
             continue;
         }
 
+        std::cout << "搜索区域: 0x" << std::hex << region.address << " - 0x" << (region.address + region.size) << std::dec << std::endl;
+
         size_t size_of_value = _search_value_type_p->size_of_value();
         size_t data_count = region.size / size_of_value;
 
@@ -232,6 +239,11 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
         kern_return_t ret = read_region(region_data_p, region, &raw_data_read_count);
 
         if (ret == KERN_SUCCESS) {
+            // 添加内存dump
+            if (i == 0) {  // 只dump第一个区域的前100字节作为示例
+                dump_memory(region.address, std::min(region.size, (vm_size_t)100));
+            }
+
             matched_offs_pt matched_offs_p = new matched_offs_t;
 
             data_pt data_itor_p = region_data_p;
@@ -249,7 +261,7 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
                     data_pt end_p = (region_data_p + region.size);
                     while (data_itor_p < end_p) {
                         if (comparator->compare(search_val_p, data_itor_p)) {
-                            ++ matched_count;
+                            ++matched_count;
                             add_matched_off(idx, matched_offs_context, *matched_offs_p);
                         }
                         data_itor_p += size_of_value;
@@ -262,10 +274,7 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
                 data_pt old_region_data_p = NULL;
                 if (_unknown_last_search_val) {
                     old_region_data_p = new data_t[region.size];
-                    // int result =
-                    //LZ4_decompress_fast((const char *) region.compressed_region_data, (char *) old_region_data_p, region.size);
-                    LZ4_decompress_safe((const char *) region.compressed_region_data, (char *) old_region_data_p, region.compressed_region_data_size, region.size);
-                    // TODO process result
+                    LZ4_decompress_safe((const char*)region.compressed_region_data, (char*)old_region_data_p, region.compressed_region_data_size, region.size);
                 }
 
                 for (uint32_t j = 0; j < old_matched_offs->size(); ++j) {
@@ -287,7 +296,7 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
 
                         if (comparator->compare(search_val_p, data_itor_p)) {
                             add_matched_off(old_matched_off, matched_offs_context, *matched_offs_p);
-                            matched_count ++;
+                            matched_count++;
                         }
                     }
                 }
@@ -303,8 +312,8 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
                 if (_unknown_last_search_val) {
                     // Compress matched region_data_p, using lz4.
                     const size_t max_compressed_data_size = LZ4_compressBound(region.size);
-                    uint8_t *compressed_data = new uint8_t[max_compressed_data_size];
-                    int compressed_data_size = LZ4_compress_fast((char *) region_data_p, (char *) compressed_data, region.size, max_compressed_data_size, 1);
+                    uint8_t* compressed_data = new uint8_t[max_compressed_data_size];
+                    int compressed_data_size = LZ4_compress_fast((char*)region_data_p, (char*)compressed_data, region.size, max_compressed_data_size, 1);
 
                     region.compressed_region_data = new data_t[compressed_data_size];
                     region.compressed_region_data_size = compressed_data_size;
@@ -320,6 +329,8 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
                 result.matched += matched_count;
 
                 used_regions->push_back(region);
+
+                std::cout << "在区域 0x" << std::hex << region.address << std::dec << " 中找到 " << matched_count << " 个匹配" << std::endl;
             }
         }
 
@@ -334,25 +345,33 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
     long end_time = get_timestamp();
     result.time_used = end_time - begin_time;
 
-    _trace("Result count: %d memory used: %.4f(MB) time used: %.3f(s)\n",
-            (int)result.matched, (float)result.memory_used/(float)(1024*1024), (float)(result.time_used)/1000.0f);
+    std::cout << "搜索完成, 总匹配数: " << result.matched << ", 耗时: " << result.time_used << " 毫秒, 内存使用: " << result.memory_used << " 字节" << std::endl;
 
     _last_search_result = result;
     return result;
 }
 
-void rx_mem_scan::search_str(const std::string &str) {
+void rx_mem_scan::search_str(const std::string& str) {
     int matched_count = 0;
     long begin_time = get_timestamp();
 
+    std::cout << "开始搜索字符串: \"" << str << "\"" << std::endl;
+
     for (uint32_t i = 0; i < _regions_p->size(); ++i) {
         region_t region = (*_regions_p)[i];
+
+        std::cout << "搜索字符串区域: 0x" << std::hex << region.address << " - 0x" << (region.address + region.size) << std::dec << std::endl;
 
         vm_size_t raw_data_read_count;
         data_pt region_data_p = new data_t[region.size];
         kern_return_t ret = read_region(region_data_p, region, &raw_data_read_count);
 
         if (ret == KERN_SUCCESS) {
+            // 添加内存dump
+            if (i == 0) {  // 只dump第一个区域的前100字节作为示例
+                dump_memory(region.address, std::min(region.size, (vm_size_t)100));
+            }
+
             data_pt data_itor_p = region_data_p;
             int str_len = str.length();            
 
@@ -369,12 +388,12 @@ void rx_mem_scan::search_str(const std::string &str) {
                         break;
                     }
 
-                    ++ i;
+                    ++i;
                 }
 
                 if (found)
                 {
-                    ++ matched_count;
+                    ++matched_count;
 
                     while (i < 255 + str_len && i < raw_data_read_count)
                     {
@@ -386,28 +405,24 @@ void rx_mem_scan::search_str(const std::string &str) {
 
                     int j = -1;
                     while (j > -256 && &data_itor_p[j] >= region_data_p && data_itor_p[j] >= 32) {
-                        -- j;
+                        --j;
                     }
 
-                    if (region.writable) {
-                        printf("\e[1;32mAddress: %016llx\e[0m, string: ", data_itor_p - region_data_p + (uint64_t)region.address);
-                    } else {
-                        printf("\e[1;31mAddress: %016llx\e[0m, string: ", data_itor_p - region_data_p + (uint64_t)region.address);
-                    }
+                    std::cout << "找到匹配: 地址 0x" << std::hex << (data_itor_p - region_data_p + (uint64_t)region.address) << std::dec << ", 上下文: ";
 
                     char str_buff[256];                    
                     
                     memcpy(str_buff, &data_itor_p[j + 1], -j - 1);
                     str_buff[-j - 1] = 0;
-                    printf("%s", str_buff);
+                    std::cout << str_buff;
 
                     memcpy(str_buff, &data_itor_p[0], str_len);
                     str_buff[str_len] = 0;
-                    printf("\e[1;32m%s\e[0m", str_buff);
+                    std::cout << "\033[1;32m" << str_buff << "\033[0m";
 
                     memcpy(str_buff, &data_itor_p[str_len], i - str_len);
                     str_buff[i - str_len] = 0;
-                    printf("%s\n", str_buff);
+                    std::cout << str_buff << std::endl;
 
                     raw_data_read_count -= i;
                     data_itor_p += i;
@@ -417,14 +432,14 @@ void rx_mem_scan::search_str(const std::string &str) {
                 }
             }
         } else {
-            printf("\e[2;37mAddress: %016llx, region size: %d, read failed\e[0m\n", (uint64_t)region.address, (int)region.size);
+            std::cout << "读取失败: 地址 0x" << std::hex << region.address << ", 大小: " << region.size << std::dec << std::endl;
         }
 
         delete[] region_data_p;
     }
 
     long end_time = get_timestamp();
-    printf("Result count: %d, time used: %.3f(s)\n", matched_count, (float)(end_time - begin_time)/1000.0f);
+    std::cout << "字符串搜索完成, 匹配数: " << matched_count << ", 耗时: " << (float)(end_time - begin_time)/1000.0f << " 秒" << std::endl;
 }
 
 matched_off_t rx_mem_scan::offset_of_matched_offsets(matched_offs_t &vec, uint32_t off_idx) {
@@ -555,4 +570,32 @@ void rx_mem_scan::init_regions() {
     }
 
     _trace("Readable region count: %d\n", (int)_regions_p->size());
+}
+
+// 在 rx_mem_scan 类中添加一个新的成员函数
+void rx_mem_scan::dump_memory(vm_address_t address, size_t size) {
+    data_pt buffer = new data_t[size];
+    vm_size_t read_count;
+    kern_return_t kr = vm_read_overwrite(_target_task, address, size, (vm_address_t)buffer, &read_count);
+    
+    if (kr != KERN_SUCCESS) {
+        std::cerr << "内存读取失败，地址: 0x" << std::hex << address << std::dec << ", 错误码: " << kr << std::endl;
+        delete[] buffer;
+        return;
+    }
+
+    std::cout << "内存内容 (地址: 0x" << std::hex << address << std::dec << ", 大小: " << size << " 字节):" << std::endl;
+    for (size_t i = 0; i < size; i += 16) {
+        std::cout << std::hex << std::setw(8) << std::setfill('0') << (address + i) << ": ";
+        for (size_t j = 0; j < 16 && (i + j) < size; ++j) {
+            std::cout << std::setw(2) << std::setfill('0') << (int)buffer[i + j] << " ";
+        }
+        std::cout << "  ";
+        for (size_t j = 0; j < 16 && (i + j) < size; ++j) {
+            char c = buffer[i + j];
+            std::cout << (isprint(c) ? c : '.');
+        }
+        std::cout << std::endl;
+    }
+    delete[] buffer;
 }
