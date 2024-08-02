@@ -26,15 +26,25 @@ jobs:
 
     - name: Compile main.mm
       run: |
-        xcrun -sdk iphoneos clang++ -c main.mm -o main.o -arch arm64 -mios-version-min=14.0 -std=c++17
+        xcrun -sdk iphoneos clang++ -c main.mm -o main.o -arch arm64 -mios-version-min=14.0 -std=c++17 -isysroot $SDKROOT -I.
 
-    - name: Assemble main.s
+    - name: Compile rx_mem_scan.cpp
       run: |
-        xcrun -sdk iphoneos clang -c main.s -o main_asm.o -arch arm64 -mios-version-min=14.0
+        xcrun -sdk iphoneos clang++ -c rx_mem_scan.cpp -o rx_mem_scan.o -arch arm64 -mios-version-min=14.0 -std=c++17 -isysroot $SDKROOT -I.
+
+    - name: Compile lz4.c
+      run: |
+        xcrun -sdk iphoneos clang -c lz4.c -o lz4.o -arch arm64 -mios-version-min=14.0 -isysroot $SDKROOT
+
+    - name: Assemble main.s (if exists)
+      run: |
+        if [ -f main.s ]; then
+          xcrun -sdk iphoneos clang -c main.s -o main_asm.o -arch arm64 -mios-version-min=14.0 -isysroot $SDKROOT
+        fi
 
     - name: Link object files
       run: |
-        xcrun -sdk iphoneos clang++ main.o main_asm.o -o main -arch arm64 -mios-version-min=14.0 -framework Foundation -framework CoreFoundation -lc++ -std=c++17
+        xcrun -sdk iphoneos clang++ main.o rx_mem_scan.o lz4.o -o main -arch arm64 -mios-version-min=14.0 -isysroot $SDKROOT -framework Foundation -framework CoreFoundation -lc++ -std=c++17
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
