@@ -7,7 +7,7 @@
 #define RXMEMSCAN_RX_MEM_SCAN_MINI_H
 
 #include <mach/mach.h>
-#include <libproc.h>
+#include "libproc.h"
 #include <memory>
 #include <string>
 #include <vector>
