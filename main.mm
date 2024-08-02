@@ -66,23 +66,33 @@ extern "C" int c_main(int argc, char* argv[])
         std::cout << "搜索值 0 的结果: " << result.matched << " 个匹配" << std::endl;
     }
 
-    // 尝试修改第一个匹配地址的值
-    if (page && page->addresses && !page->addresses->empty()) {
-        int new_value = 200;
-        vm_address_t address = (*page->addresses)[0];
-        debug_log("尝试将地址 0x%llx 的值修改为 %d", address, new_value);
-        kern_return_t result = scanner.write_val(address, &new_value);
-        if (result == KERN_SUCCESS) {
-            std::cout << "成功将值 200 写入地址 0x" << std::hex << address << std::dec << std::endl;
-        } else {
-            std::cerr << "写入值失败" << std::endl;
-            debug_log("写入失败, 错误码: %d", result);
-        }
-    } else {
-        debug_log("没有可修改的地址");
-    }
+    // 获取匹配结果的前10个地址
+    if (result.matched > 0) {
+        rx_memory_page_pt page = scanner.page_of_matched(0, 10);
+        if (page && page->addresses) {
+            std::cout << "前10个匹配地址:" << std::endl;
+            for (size_t i = 0; i < page->addresses->size(); ++i) {
+                std::cout << std::hex << "0x" << (*page->addresses)[i] << std::dec << std::endl;
+            }
 
-    delete page;
+            // 尝试修改第一个匹配地址的值
+            if (!page->addresses->empty()) {
+                int new_value = 200;
+                vm_address_t address = (*page->addresses)[0];
+                debug_log("尝试将地址 0x%llx 的值修改为 %d", address, new_value);
+                kern_return_t write_result = scanner.write_val(address, &new_value);
+                if (write_result == KERN_SUCCESS) {
+                    std::cout << "成功将值 200 写入地址 0x" << std::hex << address << std::dec << std::endl;
+                } else {
+                    std::cerr << "写入值失败" << std::endl;
+                    debug_log("写入失败, 错误码: %d", write_result);
+                }
+            }
+        }
+        delete page;
+    } else {
+        debug_log("没有找到匹配的地址");
+    }
 
     // 执行字符串搜索
     std::string search_str = "Hello, World!";
