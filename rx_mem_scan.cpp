@@ -1,5 +1,5 @@
 #include "rx_mem_scan.h"
-#include "lz4/lz4.h"
+#include "lz4/lib/lz4.h"
 #include <sys/time.h>
 
 static long get_timestamp() {
