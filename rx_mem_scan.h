@@ -5,6 +5,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <mach/mach.h>
+#include <mach/vm_region.h>
 
 #ifdef RXDEBUG
 #   define _trace(s,...) (printf(s, __VA_ARGS__))
