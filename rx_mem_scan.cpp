@@ -517,8 +517,8 @@ inline kern_return_t rx_mem_scan::read_region(data_pt region_data, region_t &reg
 }
 
 void rx_mem_scan::init_regions() {
-    mach_vm_address_t address = 0;
-    mach_vm_size_t size;
+    vm_address_t address = 0;
+    vm_size_t size;
     vm_region_basic_info_data_64_t info;
     mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
     mach_port_t object_name;
@@ -526,8 +526,16 @@ void rx_mem_scan::init_regions() {
     _regions_p = new regions_t();
 
     while (true) {
-        kern_return_t kr = mach_vm_region(_target_task, &address, &size, VM_REGION_BASIC_INFO_64,
-                                          (vm_region_info_t)&info, &info_count, &object_name);
+        kern_return_t kr = vm_region_64(
+            _target_task,
+            &address,
+            &size,
+            VM_REGION_BASIC_INFO_64,
+            (vm_region_info_t)&info,
+            &info_count,
+            &object_name
+        );
+
         if (kr != KERN_SUCCESS) {
             break;
         }
