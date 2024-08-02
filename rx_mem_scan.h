@@ -5,8 +5,8 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <mach/mach.h>
 #include <mach/vm_region.h>
+#include <iostream>
 
 #ifdef RXDEBUG
 #   define _trace(s,...) (printf(s, __VA_ARGS__))
@@ -118,18 +118,6 @@ public:
         std::cout << "比较: " << value_a << " 和 " << value_b << std::endl;
         return value_a == value_b;
     }
-};
-
-class rx_comparator {
-public:
-    virtual ~rx_comparator() {}
-    virtual boolean_t compare(void *a, void *b) = 0;
-};
-
-template <typename T>
-class rx_comparator_typed_eq : public rx_comparator {
-public:
-    boolean_t compare(void *a, void *b) override { return *(T *)b == *(T *)a; }
 };
 
 template <typename T>
