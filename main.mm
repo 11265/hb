@@ -58,15 +58,12 @@ extern "C" int c_main(int argc, char* argv[])
     std::cout << "搜索值 100 的结果: " << result.matched << " 个匹配" << std::endl;
     debug_log("精确搜索耗时: %u 毫秒, 内存使用: %u 字节", result.time_used, result.memory_used);
 
-    // 获取匹配结果的前10个地址
-    rx_memory_page_pt page = scanner.page_of_matched(0, 10);
-    if (page && page->addresses) {
-        std::cout << "前10个匹配地址:" << std::endl;
-        for (size_t i = 0; i < page->addresses->size(); ++i) {
-            std::cout << std::hex << "0x" << (*page->addresses)[i] << std::dec << std::endl;
-        }
-    } else {
-        debug_log("未找到匹配地址");
+    // 如果没有找到匹配，尝试搜索其他值
+    if (result.matched == 0) {
+        search_value = 0;  // 尝试搜索0
+        debug_log("尝试搜索值 %d ...", search_value);
+        result = scanner.search(&search_value, rx_compare_type_eq);
+        std::cout << "搜索值 0 的结果: " << result.matched << " 个匹配" << std::endl;
     }
 
     // 尝试修改第一个匹配地址的值
