@@ -1,10 +1,6 @@
-//
-// Created by rainyx on 16/9/9.
-// Copyright (c) 2016 rainyx. All rights reserved.
-//
-
 #include "rx_mem_scan.h"
 #include "lz4/lz4.h"
+#include <sys/time.h>
 
 static long get_timestamp() {
     struct timeval tv;
@@ -104,7 +100,7 @@ rx_memory_page_pt rx_mem_scan::page_of_memory(vm_address_t address, uint32_t pag
                 vm_size_t read_count;
                 kern_return_t ret = read_region(region_data_p, region, &read_count);
                 if (ret != KERN_SUCCESS) {
-                    // TODO
+                    // TODO: Handle error
                 }
                 region_data_itor_p = region_data_p + (address - region.address);
             }
@@ -156,7 +152,7 @@ rx_memory_page_pt rx_mem_scan::page_of_matched(uint32_t page_no, uint32_t page_s
                 vm_size_t read_count;
                 kern_return_t ret = read_region(region_data_p, region, &read_count);
                 if (ret != KERN_SUCCESS) {
-                    // TODO
+                    // TODO: Handle error
                 }
             }
 
@@ -192,9 +188,8 @@ rx_memory_page_pt rx_mem_scan::page_of_matched(uint32_t page_no, uint32_t page_s
 }
 
 kern_return_t rx_mem_scan::write_val(vm_address_t address, search_val_pt val) {
-    // TODO Check address is writable.
+    // TODO: Check address is writable.
     kern_return_t ret = vm_write(_target_task, address, (vm_offset_t) val, _search_value_type_p->size_of_value());
-
     return ret;
 }
 
@@ -228,7 +223,6 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
         if (!region.writable) {
             continue;
         }
-        //printf("Region address: %p, region size: %d\n", (void *)region.address, (int)region.size);
 
         size_t size_of_value = _search_value_type_p->size_of_value();
         size_t data_count = region.size / size_of_value;
@@ -294,9 +288,7 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
                             add_matched_off(old_matched_off, matched_offs_context, *matched_offs_p);
                             matched_count ++;
                         }
-
                     }
-
                 }
 
                 if (_unknown_last_search_val) {
@@ -308,7 +300,7 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
 
             if (matched_count > 0) {
                 if (_unknown_last_search_val) {
-                    // Compress matched region_data_p, using lz4. https://cyan4973.github.io/lz4/
+                    // Compress matched region_data_p, using lz4.
                     const size_t max_compressed_data_size = LZ4_compressBound(region.size);
                     uint8_t *compressed_data = new uint8_t[max_compressed_data_size];
                     int compressed_data_size = LZ4_compress_fast((char *) region_data_p, (char *) compressed_data, region.size, max_compressed_data_size, 1);
@@ -331,7 +323,6 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
         }
 
         delete[] region_data_p;
-
     }
 
     delete comparator;
@@ -343,7 +334,7 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
     result.time_used = end_time - begin_time;
 
     _trace("Result count: %d memory used: %.4f(MB) time used: %.3f(s)\n",
-            (int)result.matched, (float)result.memory_used/(float)_1MB, (float)(result.time_used)/1000.0f);
+            (int)result.matched, (float)result.memory_used/(float)(1024*1024), (float)(result.time_used)/1000.0f);
 
     _last_search_result = result;
     return result;
@@ -361,8 +352,6 @@ void rx_mem_scan::search_str(const std::string &str) {
         kern_return_t ret = read_region(region_data_p, region, &raw_data_read_count);
 
         if (ret == KERN_SUCCESS) {
-            //printf("Region address: %p, region size: %d, read count: %d\n", (void *)region.address, (int)region.size, (int)raw_data_read_count);
-
             data_pt data_itor_p = region_data_p;
             int str_len = str.length();            
 
@@ -426,8 +415,6 @@ void rx_mem_scan::search_str(const std::string &str) {
                     data_itor_p += 1;                    
                 }
             }
-
-            // free_region_memory(region);
         } else {
             printf("\e[2;37mAddress: %016llx, region size: %d, read failed\e[0m\n", (uint64_t)region.address, (int)region.size);
         }
@@ -504,13 +491,6 @@ inline void rx_mem_scan::add_matched_offs_multi(matched_offs_t &vec, matched_off
     vec.push_back(ic);
 }
 
-/**
- * 0 bi = 0, n = false, li = 0, ic = 0 []
- * 1 bi = 0, n = false, li = 1, ic = 1 []
- * 2 bi = 0, n = false, li = 2, ic = 2 [0, 3]
- * 4 bi = 4, n = false, li = 4, ic = 0 [0, 3]
- * 6 bi = 6, n = false, li = 6, ic = 0 [0, 3, 4]
- */
 inline void rx_mem_scan::add_matched_off(matched_off_t matched_idx, matched_offs_context_t &ctx, matched_offs_t &vec) {
     if (ctx.bf_nn) {
         if ((matched_idx - ctx.lf) == _search_value_type_p->size_of_value()) {
@@ -537,29 +517,33 @@ inline kern_return_t rx_mem_scan::read_region(data_pt region_data, region_t &reg
 }
 
 void rx_mem_scan::init_regions() {
-    struct proc_regioninfo region_info;
-    kern_return_t ret;
-    uint64_t addr = 0;
+    mach_vm_address_t address = 0;
+    mach_vm_size_t size;
+    vm_region_basic_info_data_64_t info;
+    mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
+    mach_port_t object_name;
 
     _regions_p = new regions_t();
-    do {
-        if (addr) {
-            if (region_info.pri_protection & VM_PROT_READ) {
-                region_t region;
 
-                region.address = region_info.pri_address;
-                region.size = region_info.pri_size;
-                region.writable = region_info.pri_protection & VM_PROT_WRITE;
-
-                _regions_p->push_back(region);
-
-                _trace("%016llx - %016llx, %d, %d\n", region_info.pri_address, region_info.pri_address + region_info.pri_size, region.writable, region_info.pri_user_tag);
-            }
+    while (true) {
+        kern_return_t kr = mach_vm_region(_target_task, &address, &size, VM_REGION_BASIC_INFO_64,
+                                          (vm_region_info_t)&info, &info_count, &object_name);
+        if (kr != KERN_SUCCESS) {
+            break;
         }
 
-        ret = proc_pidinfo(_target_pid, PROC_PIDREGIONINFO, addr, &region_info, sizeof(region_info));
-        addr = region_info.pri_address + region_info.pri_size;
-    } while (ret == sizeof(region_info));
+        if (info.protection & VM_PROT_READ) {
+            region_t region;
+            region.address = address;
+            region.size = size;
+            region.writable = info.protection & VM_PROT_WRITE;
+            _regions_p->push_back(region);
+
+            _trace("%016llx - %016llx, %d\n", address, address + size, region.writable);
+        }
+
+        address += size;
+    }
 
     _trace("Readable region count: %d\n", (int)_regions_p->size());
 }
