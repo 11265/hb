@@ -232,8 +232,6 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
             continue;
         }
 
-        std::cout << "搜索区域: 0x" << std::hex << region.address << " - 0x" << (region.address + region.size) << std::dec << std::endl;
-
         size_t size_of_value = _search_value_type_p->size_of_value();
         size_t data_count = region.size / size_of_value;
 
@@ -332,8 +330,6 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
                 result.matched += matched_count;
 
                 used_regions->push_back(region);
-
-                std::cout << "在区域 0x" << std::hex << region.address << std::dec << " 中找到 " << matched_count << " 个匹配" << std::endl;
             }
         }
 
@@ -353,7 +349,6 @@ search_result_t rx_mem_scan::search(search_val_pt search_val_p, rx_compare_type 
     _last_search_result = result;
     return result;
 }
-
 void rx_mem_scan::search_str(const std::string& str) {
     int matched_count = 0;
     long begin_time = get_timestamp();
