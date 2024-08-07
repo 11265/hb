@@ -1,4 +1,4 @@
-name: iOS Jailbreak Plugin Build
+name: iOS Build
 
 on:
   push:
@@ -11,8 +11,7 @@ jobs:
     runs-on: macos-latest
 
     steps:
-    - name: 检出代码
-      uses: actions/checkout@v2
+    - uses: actions/checkout@v2
 
     - name: Select Xcode
       run: sudo xcode-select -s /Applications/Xcode.app
@@ -37,28 +36,8 @@ jobs:
       run: |
         xcrun -sdk iphoneos clang++ main.o main_asm.o -o main -arch arm64 -mios-version-min=14.0 -framework Foundation -framework CoreFoundation -lc++ -std=c++17
 
-    - name: Create DEBIAN directory structure
-      run: |
-        mkdir -p DEBIAN
-        echo "Package: myplugin" > DEBIAN/control
-        echo "Version: 1.0" >> DEBIAN/control
-        echo "Section: Tweaks" >> DEBIAN/control
-        echo "Architecture: iphoneos-arm64" >> DEBIAN/control
-        echo "Depends: mobilesubstrate" >> DEBIAN/control
-        echo "Maintainer: Your Name <your.email@example.com>" >> DEBIAN/control
-        echo "Description: My iOS jailbreak plugin" >> DEBIAN/control
-
-    - name: Copy binary to DEBIAN directory
-      run: |
-        mkdir -p DEBIAN/usr/lib/myplugin
-        cp main DEBIAN/usr/lib/myplugin/
-
-    - name: Build DEB package
-      run: |
-        dpkg-deb --build DEBIAN myplugin.deb
-
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
-        name: ios-jailbreak-plugin
-        path: myplugin.deb
+        name: ios-arm64-binary
+        path: main
