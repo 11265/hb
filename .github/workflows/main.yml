@@ -1,4 +1,4 @@
-name: iOS Build
+name: iOS Build and Package
 
 on:
   push:
@@ -36,8 +36,30 @@ jobs:
       run: |
         xcrun -sdk iphoneos clang++ main.o main_asm.o -o main -arch arm64 -mios-version-min=14.0 -framework Foundation -framework CoreFoundation -lc++ -std=c++17
 
-    - name: Upload artifacts
+    - name: Create .deb package
+      run: |
+        mkdir -p package/DEBIAN
+        mkdir -p package/usr/local/bin
+
+        # Copy the compiled binary to the package
+        cp main package/usr/local/bin/
+
+        # Create control file
+        echo "Package: com.yourcompany.yourapp" > package/DEBIAN/control
+        echo "Name: YourApp" >> package/DEBIAN/control
+        echo "Depends: mobilesubstrate" >> package/DEBIAN/control
+        echo "Version: 1.0-1" >> package/DEBIAN/control
+        echo "Architecture: iphoneos-arm" >> package/DEBIAN/control
+        echo "Description: Your app description" >> package/DEBIAN/control
+        echo "Maintainer: Your Name <your.email@example.com>" >> package/DEBIAN/control
+        echo "Author: Your Name <your.email@example.com>" >> package/DEBIAN/control
+        echo "Section: Utilities" >> package/DEBIAN/control
+
+        # Build the .deb package
+        dpkg-deb --build package
+
+    - name: Upload .deb artifact
       uses: actions/upload-artifact@v2
       with:
-        name: ios-arm64-binary
-        path: main
+        name: ios-deb-package
+        path: ./package.deb
